@@ -23,8 +23,11 @@ include(${SDK}/cmake/XbeRecomp.cmake)
 
 file(GLOB XBE_HOST_SOURCES CONFIGURE_DEPENDS src/*/*.cpp)
 list(FILTER XBE_HOST_SOURCES EXCLUDE REGEX "/src/game/")
-# the game builds its own Direct3D, renderer and DirectSound copies in src/d3d and src/dsound
-list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/(xdk/dsound|xdk/d3d8|gpu/d3d12)\\.cpp$")
+# the game builds its own Direct3D, renderer, DirectSound and input copies in src/d3d, src/dsound and src/core
+list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/(xdk/dsound|xdk/d3d8|gpu/d3d12|core/input)\\.cpp$")
+# SDL's headers go to the input and gyro code alone (it is linked LINK_ONLY)
+set_source_files_properties(src/core/input.cpp src/core/gyro.cpp
+                            PROPERTIES INCLUDE_DIRECTORIES "${sdl3_SOURCE_DIR}/include")
 
 # partitions as xbe_symbols wrote them into config/game.toml
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS config/game.toml)

@@ -1,6 +1,8 @@
 // the settings panel on F10 and the FPS counter
 #include <algorithm>
 #include <atomic>
+#include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <iterator>
 #include <string>
@@ -17,13 +19,12 @@
 #include <imgui.h>
 
 #include "app/app.h"
+#include "app/game_settings.h"
 #include "app/menu.h"
 #include "app/panel_colors.h"
 #include "core/input.h"
 
 namespace app {
-
-bool g_fps_counter = false;
 
 namespace {
 
@@ -43,6 +44,7 @@ constexpr int kRenderStep = 5;
 
 enum class RowId {
     Heading,
+    Bind,
     DisplayMode,
     Resolution,
     RenderResolution,
@@ -53,14 +55,32 @@ enum class RowId {
     TextureReplacement,
     TextureDumping,
     DumpFormat,
+    MouseHorizontal,
+    MouseVertical,
+    AimHorizontal,
+    AimVertical,
+    InvertMouseX,
+    InvertMouseY,
+    WalkSpeed,
+    PadAimHorizontal,
+    PadAimVertical,
+    InvertPadX,
+    GyroAiming,
+    GyroSensitivity,
+    GyroAxis,
+    GyroButton,
+    GyroButtonMode,
+    GyroRecenter,
+    GyroCalibrate,
 };
 
 struct Row {
     RowId id;
     const char* label;
+    size_t action = 0;  // a bind row's input action
 };
 
-constexpr Row kRows[] = {
+constexpr Row kSettingsRows[] = {
     {RowId::Heading, "DISPLAY"},
     {RowId::DisplayMode, "DISPLAY MODE"},
     {RowId::Resolution, "RESOLUTION"},
@@ -75,6 +95,62 @@ constexpr Row kRows[] = {
     {RowId::TextureDumping, "TEXTURE DUMPING"},
     {RowId::DumpFormat, "DUMP FORMAT"},
 };
+
+constexpr Row kMouseRows[] = {
+    {RowId::Heading, "MOUSE"},
+    {RowId::MouseHorizontal, "MOUSE HORIZONTAL SENSITIVITY"},
+    {RowId::MouseVertical, "MOUSE VERTICAL SENSITIVITY"},
+    {RowId::AimHorizontal, "AIM HORIZONTAL SENSITIVITY"},
+    {RowId::AimVertical, "AIM VERTICAL SENSITIVITY"},
+    {RowId::InvertMouseX, "INVERT X-AXIS"},
+    {RowId::InvertMouseY, "INVERT Y-AXIS"},
+    {RowId::Heading, "KEYBOARD"},
+    {RowId::WalkSpeed, "WALK SPEED"},
+};
+
+// the game has its own sensitivity, Y axis invert, vibration and dead zone in its options
+constexpr Row kControllerRows[] = {
+    {RowId::Heading, "GENERAL"},
+    {RowId::PadAimHorizontal, "AIM HORIZONTAL SENSITIVITY"},
+    {RowId::PadAimVertical, "AIM VERTICAL SENSITIVITY"},
+    {RowId::InvertPadX, "INVERT X-AXIS"},
+    {RowId::Heading, "GYRO"},
+    {RowId::GyroAiming, "GYRO AIMING"},
+    {RowId::GyroSensitivity, "GYRO SENSITIVITY"},
+    {RowId::GyroAxis, "GYRO AXIS"},
+    {RowId::GyroButton, "GYRO BUTTON"},
+    {RowId::GyroButtonMode, "GYRO BUTTON MODE"},
+    {RowId::GyroRecenter, "RECENTER BUTTON"},
+    {RowId::GyroCalibrate, "CALIBRATE GYRO"},
+};
+
+const char* const kPages[] = {"RECOMP SETTINGS", "MOUSE AND KEYBOARD", "CONTROLLER"};
+constexpr int kSettingsPage = 0;
+constexpr int kKeyboardPage = 1;
+constexpr int kControllerPage = 2;
+
+// the mouse rows, then each section of the key binds under its title
+const std::vector<Row>& KeyboardRows() {
+    static const std::vector<Row> rows = [] {
+        std::vector<Row> out(std::begin(kMouseRows), std::end(kMouseRows));
+        size_t count = 0;
+        size_t sections = 0;
+        const input::Action* actions = input::Actions(&count);
+        const input::Section* titles = input::Sections(&sections);
+        for (size_t i = 0, s = 0; i < count; i++) {
+            if (s < sections && titles[s].first == i) out.push_back({RowId::Heading, titles[s++].title});
+            out.push_back({RowId::Bind, actions[i].label, i});
+        }
+        return out;
+    }();
+    return rows;
+}
+
+std::vector<Row> PageRows(int page) {
+    if (page == kKeyboardPage) return KeyboardRows();
+    if (page == kControllerPage) return {std::begin(kControllerRows), std::end(kControllerRows)};
+    return {std::begin(kSettingsRows), std::end(kSettingsRows)};
+}
 
 // Values
 
@@ -102,13 +178,45 @@ void StepTable(const uint32_t (&values)[N], uint32_t& value, int step) {
     value = values[Wrap(NearestIndex(values, value), step, int(N))];
 }
 
+// value clamped to lo to hi, stepped by inc and wrapping around
+int StepRange(int value, int lo, int hi, int inc, int step) {
+    int count = (hi - lo) / inc + 1;
+    return lo + inc * Wrap((std::clamp(value, lo, hi) - lo) / inc, step, count);
+}
+
 uint32_t StepRenderPercent(uint32_t percent, int step) {
-    int count = (kRenderMax - kRenderMin) / kRenderStep + 1;
-    int index = (std::clamp(int(percent), kRenderMin, kRenderMax) - kRenderMin) / kRenderStep;
-    return uint32_t(kRenderMin + kRenderStep * Wrap(index, step, count));
+    return uint32_t(StepRange(int(percent), kRenderMin, kRenderMax, kRenderStep, step));
+}
+
+// 0.1 to 5.0 in steps of 0.1
+void StepSensitivity(float& v, int step) {
+    v = float(StepRange(int(std::lround(v * 10.0f)), 1, 50, 1, step)) / 10.0f;
+}
+
+template <size_t N>
+void StepName(uint32_t& value, const char* const (&)[N], int step) {
+    value = uint32_t(Wrap(int(std::min<size_t>(value, N - 1)), step, int(N)));
+}
+
+template <size_t N>
+const char* NameText(uint32_t value, const char* const (&names)[N]) {
+    return names[std::min<size_t>(value, N - 1)];
 }
 
 bool SameMode(const Mode& a, const Mode& b) { return a.width == b.width && a.height == b.height; }
+
+// the display rows' settings, which wait for Apply on the panel
+struct DisplayChoice {
+    DisplayMode mode;
+    uint32_t width;
+    uint32_t height;
+    bool operator==(const DisplayChoice&) const = default;
+};
+
+DisplayChoice CurrentDisplay() {
+    const Settings& s = Get();
+    return {s.display_mode, s.width, s.height};
+}
 
 // the game window's monitor modes, smallest first so Left steps down
 std::vector<Mode> ReadModes() {
@@ -135,12 +243,12 @@ const std::vector<Mode>& Modes() {
     return modes;
 }
 
-Mode ShownMode(const Settings& s) { return s.width && s.height ? Mode{s.width, s.height} : Desktop(); }
+Mode ShownMode(const DisplayChoice& d) { return d.width && d.height ? Mode{d.width, d.height} : Desktop(); }
 
-void StepResolution(Settings& s, int step) {
+void StepResolution(DisplayChoice& d, int step) {
     const std::vector<Mode>& modes = Modes();
     if (modes.empty()) return;
-    Mode now = ShownMode(s);
+    Mode now = ShownMode(d);
     int index = 0;
     for (size_t i = 0; i < modes.size(); i++) {
         if (SameMode(modes[i], now)) index = int(i);
@@ -148,18 +256,62 @@ void StepResolution(Settings& s, int step) {
     Mode m = modes[size_t(Wrap(index, step, int(modes.size())))];
     // the desktop's own mode is kept as 0, which follows the desktop
     bool native = SameMode(m, Desktop());
-    s.width = native ? 0 : m.width;
-    s.height = native ? 0 : m.height;
+    d.width = native ? 0 : m.width;
+    d.height = native ? 0 : m.height;
+}
+
+void StepDisplay(RowId id, int step, DisplayChoice& d) {
+    if (id == RowId::DisplayMode) d.mode = DisplayMode(Wrap(int(d.mode), step, 3));
+    else StepResolution(d, step);
+}
+
+std::string ModeText(const Mode& m) { return std::to_string(m.width) + "x" + std::to_string(m.height); }
+
+std::string DisplayText(RowId id, const DisplayChoice& d) {
+    if (id == RowId::DisplayMode) return kDisplayModeNames[std::min(uint32_t(d.mode), 2u)];
+    return ModeText(ShownMode(d));
 }
 
 // the setting an ON / OFF row flips, nullptr for any other row
 bool* ToggleFlag(Settings& s, RowId id) {
+    RdrSettings& r = Rdr();
     switch (id) {
         case RowId::Vsync: return &s.vsync;
-        case RowId::FpsCounter: return &g_fps_counter;
+        case RowId::FpsCounter: return &r.fps_counter;
         case RowId::TextureReplacement: return &s.custom_textures;
         case RowId::TextureDumping: return &s.dump_textures;
+        case RowId::InvertMouseX: return &r.invert_mouse_x;
+        case RowId::InvertMouseY: return &r.invert_mouse;
+        case RowId::InvertPadX: return &r.invert_pad_x;
+        case RowId::GyroAiming: return &r.gyro.enabled;
         default: return nullptr;
+    }
+}
+
+// the setting a sensitivity row steps, nullptr for any other row
+float* Sensitivity(RowId id) {
+    RdrSettings& r = Rdr();
+    switch (id) {
+        case RowId::MouseHorizontal: return &r.mouse_sensitivity;
+        case RowId::MouseVertical: return &r.mouse_vertical_sensitivity;
+        case RowId::AimHorizontal: return &r.aim_horizontal_sensitivity;
+        case RowId::AimVertical: return &r.aim_vertical_sensitivity;
+        case RowId::PadAimHorizontal: return &r.pad_aim_horizontal_sensitivity;
+        case RowId::PadAimVertical: return &r.pad_aim_vertical_sensitivity;
+        case RowId::GyroSensitivity: return &r.gyro.sensitivity;
+        default: return nullptr;
+    }
+}
+
+void StepGyro(RowId id, int step) {
+    gyro::Settings& g = Rdr().gyro;
+    switch (id) {
+        case RowId::GyroAxis: StepName(g.axis, gyro::kAxisNames, step); break;
+        case RowId::GyroButton: StepName(g.button, gyro::kButtonNames, step); break;
+        case RowId::GyroButtonMode: StepName(g.button_mode, gyro::kButtonModeNames, step); break;
+        case RowId::GyroRecenter: StepName(g.recenter_button, gyro::kButtonNames, step); break;
+        case RowId::GyroCalibrate: gyro::StartCalibration(); break;
+        default: break;
     }
 }
 
@@ -168,18 +320,20 @@ void Step(RowId id, int step, Settings& s) {
         *flag = !*flag;
         return;
     }
+    if (float* v = Sensitivity(id)) {
+        StepSensitivity(*v, step);
+        return;
+    }
     switch (id) {
-        case RowId::DisplayMode: s.display_mode = DisplayMode(Wrap(int(s.display_mode), step, 3)); break;
-        case RowId::Resolution: StepResolution(s, step); break;
         case RowId::RenderResolution: s.render_percent = StepRenderPercent(s.render_percent, step); break;
         case RowId::MaxFps: StepTable(kFpsCaps, s.fps_cap, step); break;
         case RowId::Aniso: StepTable(kAnisoValues, s.aniso, step); break;
         case RowId::DumpFormat: s.texture_dump_format = uint32_t(Wrap(int(s.texture_dump_format), step, 2)); break;
-        default: break;
+        // 10% to 90% in steps of 10
+        case RowId::WalkSpeed: Rdr().walk_speed = uint32_t(StepRange(int(Rdr().walk_speed), 10, 90, 10, step)); break;
+        default: StepGyro(id, step); break;
     }
 }
-
-std::string ModeText(const Mode& m) { return std::to_string(m.width) + "x" + std::to_string(m.height); }
 
 std::string FpsCapText(uint32_t cap) {
     if (cap == kFpsCapRefresh) return "REFRESH RATE";
@@ -187,21 +341,42 @@ std::string FpsCapText(uint32_t cap) {
 }
 
 std::string RenderText(const Settings& s) {
-    Mode out = ShownMode(s);
+    Mode out = ShownMode(CurrentDisplay());
     Mode render{out.width * s.render_percent / 100, out.height * s.render_percent / 100};
     return std::to_string(s.render_percent) + "% (" + ModeText(render) + ")";
 }
 
+std::string SensitivityText(float v) {
+    char text[16];
+    std::snprintf(text, sizeof(text), "%.1f", v);
+    return text;
+}
+
+std::string GyroText(RowId id) {
+    const gyro::Settings& g = Rdr().gyro;
+    switch (id) {
+        case RowId::GyroAxis: return NameText(g.axis, gyro::kAxisNames);
+        case RowId::GyroButton: return NameText(g.button, gyro::kButtonNames);
+        case RowId::GyroButtonMode: return NameText(g.button_mode, gyro::kButtonModeNames);
+        case RowId::GyroRecenter: return NameText(g.recenter_button, gyro::kButtonNames);
+        case RowId::GyroCalibrate: return gyro::Calibrating() ? "KEEP STILL" : "START";
+        default: return "";
+    }
+}
+
 std::string Text(RowId id, Settings& s) {
     if (bool* flag = ToggleFlag(s, id)) return *flag ? "ON" : "OFF";
+    if (float* v = Sensitivity(id)) return SensitivityText(*v);
     switch (id) {
-        case RowId::DisplayMode: return kDisplayModeNames[std::min(uint32_t(s.display_mode), 2u)];
-        case RowId::Resolution: return ModeText(ShownMode(s));
         case RowId::RenderResolution: return RenderText(s);
         case RowId::MaxFps: return FpsCapText(kFpsCaps[NearestIndex(kFpsCaps, s.fps_cap)]);
         case RowId::Aniso: return kAnisoNames[NearestIndex(kAnisoValues, s.aniso)];
         case RowId::DumpFormat: return kDumpFormatNames[std::min(s.texture_dump_format, 1u)];
-        default: return "";
+        case RowId::WalkSpeed: {
+            uint32_t v = Rdr().walk_speed;
+            return std::to_string(v) + (v == 50 ? "% (DEFAULT)" : "%");
+        }
+        default: return GyroText(id);
     }
 }
 
@@ -209,24 +384,19 @@ std::string Text(RowId id, Settings& s) {
 
 // display mode and resolution wait for Apply, as Windows' display settings do; closing drops them
 std::atomic<bool> g_display_held{false};
-Settings g_held;
+DisplayChoice g_held;
 
 bool DisplayRow(RowId id) { return id == RowId::DisplayMode || id == RowId::Resolution; }
 
 void HoldDisplay(RowId id, int step) {
-    const Settings& s = Get();
-    if (!g_display_held) {
-        g_held.display_mode = s.display_mode;
-        g_held.width = s.width;
-        g_held.height = s.height;
-    }
-    Step(id, step, g_held);
-    g_display_held = g_held.display_mode != s.display_mode || g_held.width != s.width || g_held.height != s.height;
+    if (!g_display_held) g_held = CurrentDisplay();
+    StepDisplay(id, step, g_held);
+    g_display_held = !(g_held == CurrentDisplay());
 }
 
 void ApplyHeld() {
     Settings& s = Get();
-    s.display_mode = g_held.display_mode;
+    s.display_mode = g_held.mode;
     s.width = g_held.width;
     s.height = g_held.height;
     g_display_held = false;
@@ -243,11 +413,33 @@ void ChangeRow(RowId id, int step) {
     Save();
 }
 
-void RestoreDefaults() {
+// each page's own rows back to their defaults, the others' kept
+void RestoreDefaults(int page) {
+    RdrSettings& r = Rdr();
+    RdrSettings fresh;
+    if (page == kKeyboardPage) {
+        r.mouse_sensitivity = fresh.mouse_sensitivity;
+        r.mouse_vertical_sensitivity = fresh.mouse_vertical_sensitivity;
+        r.aim_horizontal_sensitivity = fresh.aim_horizontal_sensitivity;
+        r.aim_vertical_sensitivity = fresh.aim_vertical_sensitivity;
+        r.invert_mouse = fresh.invert_mouse;
+        r.invert_mouse_x = fresh.invert_mouse_x;
+        r.walk_speed = fresh.walk_speed;
+        input::ResetBindings();
+        return;
+    }
+    if (page == kControllerPage) {
+        r.pad_aim_horizontal_sensitivity = fresh.pad_aim_horizontal_sensitivity;
+        r.pad_aim_vertical_sensitivity = fresh.pad_aim_vertical_sensitivity;
+        r.invert_pad_x = fresh.invert_pad_x;
+        r.gyro = fresh.gyro;
+        Save();
+        return;
+    }
     std::string join_ip = Get().join_ip;  // no row on the panel
     Get() = Settings{};
     Get().join_ip = join_ip;
-    g_fps_counter = false;
+    r.fps_counter = fresh.fps_counter;
     g_display_held = false;
     ApplyDisplay();
     Save();
@@ -256,9 +448,49 @@ void RestoreDefaults() {
 // shown dimmed and left as it is
 bool Greyed(RowId id) { return id == RowId::DumpFormat && !Get().dump_textures; }
 
+// Key binds
+
+// the row being rebound, -1 when idle; its keys must be released before the next press binds
+std::atomic<int> g_capture{-1};
+int g_capture_slot = 0;  // its box: 0 the key, 1 the alternate
+int g_hovered_box = -1;  // the box under the mouse or focused with a key in it, this frame
+bool g_capture_armed = false;
+int g_capture_done = 0;  // frame of the last bind, the key that bound must not start another
+int g_page = kSettingsPage;
+
+std::string KeyText(std::string keys) {
+    if (keys.empty()) return "UNBOUND";
+    for (char& c : keys) c = char(std::toupper(uint8_t(c)));
+    return keys;
+}
+
+// the action's key and its alternate as their boxes show them, the alternate blank when there is none
+std::vector<std::string> KeyBoxes(size_t action) {
+    std::string keys = input::Binding(action);
+    size_t comma = keys.find(',');
+    std::string second = comma == std::string::npos ? std::string() : keys.substr(comma + 1);
+    second = second.substr(0, second.find(','));
+    return {KeyText(keys.substr(0, comma)), second.empty() ? second : KeyText(second)};
+}
+
+// Escape cancels, any other bindable key or mouse button binds
+void PollCapture() {
+    if (g_capture < 0) return;
+    int vk = input::PressedKey();
+    if (!g_capture_armed) {
+        g_capture_armed = !vk;
+        return;
+    }
+    if (!vk) return;
+    if (vk != VK_ESCAPE) input::Bind(size_t(g_capture.load()), vk, g_capture_slot);
+    g_capture = -1;
+    g_capture_done = ImGui::GetFrameCount();
+}
+
 // Drawing
 
 constexpr float kValueEms = 12.0f;  // the value column's width
+constexpr float kKeyBoxEms = 10.0f;  // a key box's width, the key and its alternate side by side
 
 // a row's place and size: the label left, the value block (an arrow each side of the value) right
 struct RowBox {
@@ -280,6 +512,18 @@ RowBox MeasureRow() {
     box.row_x = ImGui::GetCursorPosX();
     box.row_y = ImGui::GetCursorPosY();
     return box;
+}
+
+void RowLabel(const RowBox& box, const char* label) {
+    ImGui::SetCursorPos(ImVec2(box.row_x + ImGui::GetStyle().ItemInnerSpacing.x, box.row_y));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+}
+
+// the cursor back to the row's start, then past the whole row
+void EndRow(const RowBox& box) {
+    ImGui::SetCursorPos(ImVec2(box.row_x, box.row_y));
+    ImGui::Dummy(ImVec2(box.row_w, box.row_h));
 }
 
 void Section(const char* title) {
@@ -329,31 +573,124 @@ int OptionRow(const char* label, const char* value) {
                                                   ImGui::GetColorU32(ImGuiCol_Header));
         step = FocusedStep();
     }
-    ImGui::SetCursorPos(ImVec2(box.row_x + ImGui::GetStyle().ItemInnerSpacing.x, box.row_y));
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
+    RowLabel(box, label);
     if (int clicked = ValueBlock(box, value)) step = clicked;
     ImGui::PopID();
-    // the cursor back to the row's start, then past the whole row
-    ImGui::SetCursorPos(ImVec2(box.row_x, box.row_y));
-    ImGui::Dummy(ImVec2(box.row_w, box.row_h));
+    EndRow(box);
     return step;
 }
 
-void DrawRows() {
-    for (const Row& r : kRows) {
+// one key box: a click or Enter starts its capture, a right click or Delete clears it
+struct KeyBox {
+    bool pressed = false;
+    bool cleared = false;
+};
+
+KeyBox DrawKeyBox(float x, float y, float w, float h, const std::string& key, bool capturing) {
+    KeyBox result;
+    ImGui::SetCursorPos(ImVec2(x, y));
+    result.pressed = ImGui::InvisibleButton("##key", ImVec2(w, h));
+    bool focused = ImGui::IsItemFocused();
+    bool delete_key = focused && ImGui::IsKeyPressed(ImGuiKey_Delete, false);
+    result.cleared = ImGui::IsItemClicked(ImGuiMouseButton_Right) || delete_key;
+    bool lit = capturing || focused || ImGui::IsItemHovered();
+    ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                                              ImGui::GetColorU32(lit ? ImGuiCol_Header : ImGuiCol_FrameBg));
+    std::string text = capturing ? "PRESS A KEY" : key;
+    float pad = (w - ImGui::CalcTextSize(text.c_str()).x) * 0.5f;
+    ImGui::SetCursorPos(ImVec2(x + std::max(pad, 0.0f), y));
+    ImGui::AlignTextToFramePadding();
+    if (capturing) ImGui::PushStyleColor(ImGuiCol_Text, kHeading);
+    ImGui::TextUnformatted(text.c_str());
+    if (capturing) ImGui::PopStyleColor();
+    return result;
+}
+
+// label left, the key and its alternate in a box each right, ending where the other rows' values do
+void BindRow(const Row& row) {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    RowBox box = MeasureRow();
+    float value_end = box.row_x + box.row_w - box.block_w + box.row_h + style.ItemSpacing.x + box.value_w;
+    float box_w = ImGui::GetFontSize() * kKeyBoxEms;
+    std::vector<std::string> keys = KeyBoxes(row.action);
+    bool idle = g_capture < 0 && ImGui::GetFrameCount() > g_capture_done + 1;
+    ImGui::PushID(row.label);
+    RowLabel(box, row.label);
+    for (int i = 0; i < 2; i++) {
+        ImGui::PushID(i);
+        float x = value_end - float(2 - i) * box_w - float(1 - i) * style.ItemSpacing.x;
+        bool capturing = g_capture == int(row.action) && g_capture_slot == i;
+        KeyBox k = DrawKeyBox(x, box.row_y, box_w, box.row_h, keys[size_t(i)], capturing);
+        if ((ImGui::IsItemHovered() || ImGui::IsItemFocused()) && !keys[size_t(i)].empty()) g_hovered_box = i;
+        if (k.pressed && idle) {
+            g_capture_slot = i;
+            g_capture = int(row.action);
+            g_capture_armed = false;
+        }
+        // a Delete that answered a capture is no clear
+        if (k.cleared && idle) input::Bind(row.action, 0, i);
+        ImGui::PopID();
+    }
+    ImGui::PopID();
+    EndRow(box);
+}
+
+void DrawRows(int page) {
+    for (const Row& r : PageRows(page)) {
         if (r.id == RowId::Heading) {
             Section(r.label);
             continue;
         }
+        if (r.id == RowId::Bind) {
+            BindRow(r);
+            continue;
+        }
         bool held = g_display_held && DisplayRow(r.id);
-        std::string value = Text(r.id, held ? g_held : Get());
+        std::string value = DisplayRow(r.id) ? DisplayText(r.id, held ? g_held : CurrentDisplay()) : Text(r.id, Get());
         bool greyed = Greyed(r.id);
         ImGui::BeginDisabled(greyed);
         int step = OptionRow(r.label, value.c_str());
         ImGui::EndDisabled();
         if (step && !greyed) ChangeRow(r.id, step);
     }
+}
+
+// one tab a page, as wide as they share the line; LB / RB step them as the game's menus do
+void DrawTabs() {
+    int step = ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false) - ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false);
+    // a selection made here shows from the next frame; not under a bind
+    bool set = step && g_capture < 0;
+    if (set) g_page = Wrap(g_page, step, int(std::size(kPages)));
+    ImGui::PushStyleColor(ImGuiCol_Tab, kTab);
+    ImGui::PushStyleColor(ImGuiCol_TabHovered, kTabHovered);
+    ImGui::PushStyleColor(ImGuiCol_TabSelected, kHighlight);
+    ImGui::PushStyleColor(ImGuiCol_TabSelectedOverline, kHeading);
+    ImGui::PushStyleVar(ImGuiStyleVar_TabRounding, 0.0f);
+    if (ImGui::BeginTabBar("##pages")) {
+        int count = int(std::size(kPages));
+        float gaps = ImGui::GetStyle().ItemInnerSpacing.x * float(count - 1);
+        float w = (ImGui::GetContentRegionAvail().x - gaps) / float(count);
+        for (int i = 0; i < count; i++) {
+            ImGui::SetNextItemWidth(w);
+            ImGuiTabItemFlags flags = set && i == g_page ? ImGuiTabItemFlags_SetSelected : 0;
+            if (ImGui::BeginTabItem(kPages[i], nullptr, flags)) {
+                if (!set && i != g_page) {
+                    g_page = i;
+                    g_capture = -1;
+                }
+                ImGui::EndTabItem();
+            }
+        }
+        ImGui::EndTabBar();
+    }
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(4);
+}
+
+const char* Hint() {
+    if (g_capture >= 0) return "Press a key or mouse button to bind, Escape cancels";
+    if (g_page == kKeyboardPage && g_hovered_box >= 0) return "Right click or Delete clears the key";
+    return "";
 }
 
 // Back, Defaults and Apply on the right
@@ -363,7 +700,10 @@ void DrawButtons() {
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(pad, 0.0f));
     if (ImGui::Button("Back", ImVec2(bw, 0))) ToggleMenu();
     ImGui::SameLine();
-    if (ImGui::Button("Defaults", ImVec2(bw, 0))) RestoreDefaults();
+    if (ImGui::Button("Defaults", ImVec2(bw, 0))) {
+        g_capture = -1;
+        RestoreDefaults(g_page);
+    }
     ImGui::SameLine();
     ImGui::BeginDisabled(!g_display_held);
     if (ImGui::Button("Apply", ImVec2(bw, 0))) ApplyHeld();
@@ -389,12 +729,17 @@ void DrawPanel() {
     constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
                                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar;
     if (ImGui::Begin("##settings", nullptr, kFlags)) {
-        DrawTitle("RECOMP SETTINGS");
-        float footer = ImGui::GetFrameHeightWithSpacing() + em;
+        DrawTitle("SETTINGS");
+        DrawTabs();
+        float footer = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() + em;
         ImGui::BeginChild("##rows", ImVec2(0, -footer), ImGuiChildFlags_NavFlattened);
-        DrawRows();
+        g_hovered_box = -1;
+        DrawRows(g_page);
         ImGui::EndChild();
         ImGui::Separator();
+        ImGui::PushStyleColor(ImGuiCol_Text, kDim);
+        ImGui::TextUnformatted(Hint());
+        ImGui::PopStyleColor();
         DrawButtons();
     }
     ImGui::End();
@@ -413,40 +758,55 @@ void DrawFps(double fps) {
     draw->AddText(ImGui::GetFont(), size, at, IM_COL32_WHITE, text);
 }
 
+void ToggleTextureReplacement() {
+    Get().custom_textures = !Get().custom_textures;
+    Save();
+}
+
 }  // namespace
 
 bool MenuOpen() { return g_open.load(std::memory_order_relaxed); }
 
+bool Capturing() { return g_capture >= 0; }
+
 void ToggleMenu() {
-    g_open.store(!MenuOpen(), std::memory_order_relaxed);
+    bool open = !MenuOpen();
+    g_open.store(open, std::memory_order_relaxed);
     g_display_held = false;
+    g_capture = -1;
+    input::SetBlocked(open);
 }
 
 void DrawUi(double fps) {
     ImGuiIO& io = ImGui::GetIO();
+    // the cursor is ImGui's only over the panel, the game's own the rest of the time
+    if (MenuOpen()) io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+    else io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
     io.KeyRepeatRate = 0.1f;  // held arrows step ten times a second, ImGui's twenty is too fast for settings
     io.FontGlobalScale = std::max(1.0f, io.DisplaySize.y / 720.0f);
-    if (g_fps_counter) DrawFps(fps);
-    if (MenuOpen()) DrawPanel();
+    if (Rdr().fps_counter) DrawFps(fps);
+    if (!MenuOpen()) return;
+    PollCapture();
+    DrawPanel();
 }
 
-// F10 opens and closes, Escape closes; F10 is a system key, so Windows' menu key handling is kept away from it
-bool MenuMessage(void*, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* result) {
-    if (msg == WM_SYSKEYUP && wp == VK_F10) {
-        *result = 0;
+// The settings panel key opens and closes, Escape closes; F10 is a system key, so Windows' menu key handling is kept
+// away from it. The texture replacement key flips the setting. A key that answers a capture does neither.
+bool MenuMessage(uint32_t msg, uintptr_t wp, intptr_t lp) {
+    if (msg == WM_SYSKEYUP && wp == VK_F10) return true;
+    bool pressed = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && !(lp & (1 << 30));  // bit 30: a held key's repeat
+    if (!pressed || Capturing()) return false;
+    int vk = int(wp);
+    bool panel = input::HostKey(input::KeyEvent::SettingsPanel, vk) || (vk == VK_ESCAPE && MenuOpen());
+    if (panel) {
+        ToggleMenu();
         return true;
     }
-    bool pressed = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && !(lp & (1 << 30));  // bit 30: a held key's repeat
-    bool toggle = wp == VK_F10 || (wp == VK_ESCAPE && MenuOpen());
-    if (!pressed || !toggle) return false;
-    ToggleMenu();
-    *result = 0;
-    return true;
-}
-
-// the game gets no controller input while the panel is open
-void MenuPad(int, input::Pad& pad) {
-    if (MenuOpen()) pad = input::Pad{.connected = pad.connected};
+    if (input::HostKey(input::KeyEvent::ToggleTextures, vk)) {
+        ToggleTextureReplacement();
+        return true;
+    }
+    return false;
 }
 
 }  // namespace app

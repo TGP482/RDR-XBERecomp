@@ -2,20 +2,14 @@
 #pragma once
 #include <cstdint>
 
-namespace input {
-struct Pad;
-}
-
 namespace app {
-
-extern bool g_fps_counter;  // saved as fps_counter
 
 bool MenuOpen();
 void ToggleMenu();
+bool Capturing();  // a key bind waits for a key
 
-// GameInfo hooks
-void DrawUi(double fps);
-bool MenuMessage(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* result);
-void MenuPad(int port, input::Pad& pad);
+void DrawUi(double fps);  // GameInfo::ui
+// a key message for the panel: its key, Escape while it is open, the texture replacement key; true takes it
+bool MenuMessage(uint32_t msg, uintptr_t wp, intptr_t lp);
 
 }  // namespace app
