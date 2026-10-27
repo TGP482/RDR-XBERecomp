@@ -55,6 +55,7 @@ void LoadRdr(const void* table) {
     s.hdr_output = t["hdr_output"].value_or(s.hdr_output);
     s.smaa = t["smaa"].value_or(s.smaa);
     s.pause_on_focus_loss = t["pause_on_focus_loss"].value_or(s.pause_on_focus_loss);
+    s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
     s.audio_output = std::min(t["audio_output"].value_or(s.audio_output), audio::kOutputMono);
     audio::SetOutputMode(s.audio_output);
     s.mouse_sensitivity = ReadFloat(t, "mouse_sensitivity", s.mouse_sensitivity);
@@ -85,6 +86,7 @@ void SaveRdr(void* table) {
     t.insert("hdr_output", s.hdr_output);
     t.insert("smaa", s.smaa);
     t.insert("pause_on_focus_loss", s.pause_on_focus_loss);
+    t.insert("skip_intros", s.skip_intros);
     t.insert("audio_output", int64_t(s.audio_output));
     t.insert("mouse_sensitivity", double(s.mouse_sensitivity));
     t.insert("mouse_vertical_sensitivity", double(s.mouse_vertical_sensitivity));

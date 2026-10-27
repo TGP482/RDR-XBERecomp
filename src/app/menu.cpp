@@ -64,6 +64,7 @@ enum class RowId {
     Aniso,
     Smaa,
     PauseOnFocusLoss,
+    SkipIntros,
     AudioOutput,
     TextureReplacement,
     TextureDumping,
@@ -108,6 +109,7 @@ constexpr Row kSettingsRows[] = {
     {RowId::Smaa, "SMAA"},
     {RowId::Aniso, "ANISOTROPIC FILTERING"},
     {RowId::Heading, "GENERAL"},
+    {RowId::SkipIntros, "SKIP INTROS"},
     {RowId::PauseOnFocusLoss, "PAUSE ON FOCUS LOSS"},
     {RowId::AudioOutput, "AUDIO OUTPUT"},
     {RowId::Heading, "TEXTURES"},
@@ -339,6 +341,7 @@ bool* ToggleFlag(Settings& s, RowId id) {
         case RowId::HdrOutput: return &r.hdr_output;
         case RowId::Smaa: return &r.smaa;
         case RowId::PauseOnFocusLoss: return &r.pause_on_focus_loss;
+        case RowId::SkipIntros: return &r.skip_intros;
         case RowId::TextureReplacement: return &s.custom_textures;
         case RowId::TextureDumping: return &s.dump_textures;
         case RowId::InvertMouseX: return &r.invert_mouse_x;
@@ -516,6 +519,7 @@ void RestoreDefaults(int page) {
     r.hdr_output = fresh.hdr_output;
     r.smaa = fresh.smaa;
     r.pause_on_focus_loss = fresh.pause_on_focus_loss;
+    r.skip_intros = fresh.skip_intros;
     r.audio_output = fresh.audio_output;
     audio::SetOutputMode(r.audio_output);
     g_display_held = false;
