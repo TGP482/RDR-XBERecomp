@@ -165,6 +165,7 @@ DirectSoundCreate                                    = 0x3A1C17
 DirectSoundCreateBuffer                              = 0
 DirectSoundCreateStream                              = 0x3A1C5E
 DirectSoundDoWork                                    = 0x39F6F6
+DirectSoundGetSampleTime                             = 0x39DB31  # by hand: .XTLID 0xB0011, called at 0x2E2C27
 DirectSoundUseFullHRTF                               = 0
 DirectSoundUseLightHRTF                              = 0x39DB41
 getsockname                                          = 0
@@ -276,3 +277,9 @@ XPP_MemoryUnitType          = 0x3C7A20
 # argument locations in API order for functions a link time code generated library compiled with another
 # convention: a register (eax ebx ecx edx esi edi ebp) or "stack" for the next stack slot, which the callee pops
 [abi]
+
+# XACT engine clock: the APU sample counter comes from the host, the register is not mapped
+[[hook]]
+at = 0x351D91
+call = "ReadSampleTime"
+on_true = 0x351D96

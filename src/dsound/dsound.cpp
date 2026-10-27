@@ -85,6 +85,10 @@ X86Func* Find(uint32_t guest);
 #define SYM_IDirectSoundBuffer_SetEG FFFFFF0E
 #define HAS_IDirectSoundBuffer_SetEG 0
 #endif
+#ifndef SYM_DirectSoundGetSampleTime
+#define SYM_DirectSoundGetSampleTime FFFFFF0F
+#define HAS_DirectSoundGetSampleTime 0
+#endif
 
 namespace {
 
@@ -755,7 +759,7 @@ static void AuditExports() {
         SYM(CDirectSoundStream_SetFrequency), SYM(CDirectSoundStream_SetFilter), SYM(CDirectSoundStream_SetHeadroom),
         SYM(CDirectSoundStream_SetMixBinVolumes), SYM(CDirectSoundStream_SetMixBins), SYM(CDirectSoundStream_SetMaxDistance),
         SYM(CDirectSoundStream_SetMinDistance), SYM(CDirectSoundStream_SetPosition), SYM(CDirectSoundStream_SetVelocity),
-        SYM(CDirectSoundStream_SetI3DL2Source), SYM(IDirectSoundStream_SetEG)};
+        SYM(CDirectSoundStream_SetI3DL2Source), SYM(IDirectSoundStream_SetEG), SYM(DirectSoundGetSampleTime)};
     std::string left;
     // the library's own section: the WMA decoder shares the export ids and touches no DSOUND object
     uint32_t lo = 0, hi = 0;
@@ -790,6 +794,23 @@ HLE_STDCALL(DirectSoundCreate, 3) {
 HLE_STDCALL(IDirectSound_Release, 1) { return 0; }
 HLE_STDCALL(DirectSoundUseFullHRTF, 0) { return 0; }
 HLE_STDCALL(DirectSoundUseLightHRTF, 0) { return 0; }
+
+// the APU's 48 kHz sample counter, a 32 bit register that wraps
+static uint32_t SampleTime() {
+    using namespace std::chrono;
+    using Samples = duration<int64_t, std::ratio<1, audio::kRate>>;
+    static const steady_clock::time_point start = steady_clock::now();
+    return uint32_t(duration_cast<Samples>(steady_clock::now() - start).count());
+}
+
+HLE_STDCALL(DirectSoundGetSampleTime, 0) { return SampleTime(); }
+
+// XACT's engine clock reads the counter register 0xFE80200C itself (config [[hook]] at 0x351D91)
+bool ReadSampleTime(X86Context& ctx, uint8_t*) {
+    ctx.eax = SampleTime();
+    return true;
+}
+
 HLE_STDCALL(IDirectSound_GetSpeakerConfig, 2) {
     W32(a[1], 0);  // DSSPEAKER_STEREO
     return 0;
