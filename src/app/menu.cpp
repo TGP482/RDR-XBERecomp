@@ -53,6 +53,7 @@ enum class RowId {
     Resolution,
     RenderResolution,
     Vsync,
+    HdrOutput,
     MaxFps,
     FpsCounter,
     ColourBlind,
@@ -94,6 +95,7 @@ constexpr Row kSettingsRows[] = {
     {RowId::Resolution, "RESOLUTION"},
     {RowId::RenderResolution, "RENDER RESOLUTION"},
     {RowId::Vsync, "VERTICAL SYNC"},
+    {RowId::HdrOutput, "HDR OUTPUT"},
     {RowId::MaxFps, "MAX FRAME RATE"},
     {RowId::FpsCounter, "FPS COUNTER"},
     {RowId::ColourBlind, "COLOUR BLIND MODE"},
@@ -328,6 +330,7 @@ bool* ToggleFlag(Settings& s, RowId id) {
     switch (id) {
         case RowId::Vsync: return &s.vsync;
         case RowId::FpsCounter: return &r.fps_counter;
+        case RowId::HdrOutput: return &r.hdr_output;
         case RowId::Smaa: return &r.smaa;
         case RowId::PauseOnFocusLoss: return &r.pause_on_focus_loss;
         case RowId::TextureReplacement: return &s.custom_textures;
@@ -368,6 +371,7 @@ void StepGyro(RowId id, int step) {
 }
 
 void Step(RowId id, int step, Settings& s) {
+    if (id == RowId::HdrOutput && !HdrDisplay()) return;
     if (bool* flag = ToggleFlag(s, id)) {
         *flag = !*flag;
         return;
@@ -418,6 +422,7 @@ std::string GyroText(RowId id) {
 }
 
 std::string Text(RowId id, Settings& s) {
+    if (id == RowId::HdrOutput && !HdrDisplay()) return "NOT SUPPORTED";
     if (bool* flag = ToggleFlag(s, id)) return *flag ? "ON" : "OFF";
     if (float* v = Sensitivity(id)) return SensitivityText(*v);
     switch (id) {
@@ -497,6 +502,7 @@ void RestoreDefaults(int page) {
     r.monitor = fresh.monitor;
     r.fps_counter = fresh.fps_counter;
     r.colour_blind = fresh.colour_blind;
+    r.hdr_output = fresh.hdr_output;
     r.smaa = fresh.smaa;
     r.pause_on_focus_loss = fresh.pause_on_focus_loss;
     g_display_held = false;
@@ -505,7 +511,10 @@ void RestoreDefaults(int page) {
 }
 
 // shown dimmed and left as it is
-bool Greyed(RowId id) { return id == RowId::DumpFormat && !Get().dump_textures; }
+bool Greyed(RowId id) {
+    if (id == RowId::HdrOutput) return !HdrDisplay();
+    return id == RowId::DumpFormat && !Get().dump_textures;
+}
 
 // Key binds
 

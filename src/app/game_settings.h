@@ -1,5 +1,6 @@
 // settings the SDK's settings file does not know, kept in the same file
 #pragma once
+#include <atomic>
 #include <cstdint>
 #include <map>
 #include <string>
@@ -12,6 +13,7 @@ struct RdrSettings {
     std::string monitor;  // its device name, \\.\DISPLAY2; empty the primary
     bool fps_counter = false;
     uint32_t colour_blind = 0;  // 0 off, 1 protanopia, 2 deuteranopia, 3 tritanopia
+    bool hdr_output = true;  // HDR10 on a display with Windows HDR on
     bool smaa = false;
     bool pause_on_focus_loss = true;  // the game and its sound stop while the window is in the background
     // the mouse's look, the aim ones times the others while aiming
@@ -31,6 +33,8 @@ struct RdrSettings {
 };
 
 RdrSettings& Rdr();
+// the window's display has Windows HDR on, as the renderer last saw
+std::atomic<bool>& HdrDisplay();
 // GameInfo hooks: the settings file's toml::table
 void LoadRdr(const void* table);
 void SaveRdr(void* table);
