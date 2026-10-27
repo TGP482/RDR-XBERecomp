@@ -12,10 +12,14 @@
 #include <cstdlib>
 
 #include "app/game_settings.h"
+#include "core/log.h"
+#include "dsound/dsound.h"
 
 namespace app {
 
 namespace {
+
+constexpr DWORD kPollMs = 20;
 
 HMONITOR MonitorHandle(const std::string& device) {
     struct Find {
@@ -31,6 +35,14 @@ HMONITOR MonitorHandle(const std::string& device) {
     };
     if (!device.empty()) EnumDisplayMonitors(nullptr, nullptr, match, LPARAM(&find));
     return find.found ? find.found : MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+}
+
+// a hidden window, behind the splash or for a handover, never pauses: it opens from the game thread
+bool ShouldPause() {
+    if (!Rdr().pause_on_focus_loss) return false;
+    HWND hwnd = static_cast<HWND>(Window());
+    if (!hwnd || !IsWindowVisible(hwnd)) return false;
+    return GetForegroundWindow() != hwnd || IsIconic(hwnd);
 }
 
 }  // namespace
@@ -67,6 +79,15 @@ void ShowOnMonitor() {
         SetWindowPos(hwnd, nullptr, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_NOZORDER | SWP_NOACTIVATE);
     }
     ApplyDisplay();
+}
+
+void WaitWhileUnfocused() {
+    if (!ShouldPause()) return;
+    LOGR("focus lost: paused");
+    dsound::SetPaused(true);
+    while (ShouldPause()) Sleep(kPollMs);
+    dsound::SetPaused(false);
+    LOGR("focus back: resumed");
 }
 
 }  // namespace app

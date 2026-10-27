@@ -1,4 +1,4 @@
-// the monitor the game shows on
+// the monitor the game shows on and the pause while the window is in the background
 #pragma once
 #include <string>
 #include <vector>
@@ -18,5 +18,8 @@ std::vector<Display> Displays();
 // the window onto the monitor setting's monitor (the primary for empty or one not connected), then the display
 // applied there: the SDK applies the mode to the window's monitor
 void ShowOnMonitor();
+// any thread that swaps, before the present: waits while the window is in the background or minimized, its sound
+// stopped
+void WaitWhileUnfocused();
 
 }  // namespace app

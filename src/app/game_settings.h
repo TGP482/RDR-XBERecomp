@@ -11,6 +11,7 @@ namespace app {
 struct RdrSettings {
     std::string monitor;  // its device name, \\.\DISPLAY2; empty the primary
     bool fps_counter = false;
+    bool pause_on_focus_loss = true;  // the game and its sound stop while the window is in the background
     // the mouse's look, the aim ones times the others while aiming
     float mouse_sensitivity = 1.0f;  // horizontal
     float mouse_vertical_sensitivity = 1.0f;

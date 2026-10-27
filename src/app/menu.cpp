@@ -55,6 +55,7 @@ enum class RowId {
     MaxFps,
     FpsCounter,
     Aniso,
+    PauseOnFocusLoss,
     TextureReplacement,
     TextureDumping,
     DumpFormat,
@@ -94,6 +95,8 @@ constexpr Row kSettingsRows[] = {
     {RowId::FpsCounter, "FPS COUNTER"},
     {RowId::Heading, "GRAPHICS"},
     {RowId::Aniso, "ANISOTROPIC FILTERING"},
+    {RowId::Heading, "GENERAL"},
+    {RowId::PauseOnFocusLoss, "PAUSE ON FOCUS LOSS"},
     {RowId::Heading, "TEXTURES"},
     {RowId::TextureReplacement, "TEXTURE REPLACEMENT"},
     {RowId::TextureDumping, "TEXTURE DUMPING"},
@@ -320,6 +323,7 @@ bool* ToggleFlag(Settings& s, RowId id) {
     switch (id) {
         case RowId::Vsync: return &s.vsync;
         case RowId::FpsCounter: return &r.fps_counter;
+        case RowId::PauseOnFocusLoss: return &r.pause_on_focus_loss;
         case RowId::TextureReplacement: return &s.custom_textures;
         case RowId::TextureDumping: return &s.dump_textures;
         case RowId::InvertMouseX: return &r.invert_mouse_x;
@@ -484,6 +488,7 @@ void RestoreDefaults(int page) {
     Get().join_ip = join_ip;
     r.monitor = fresh.monitor;
     r.fps_counter = fresh.fps_counter;
+    r.pause_on_focus_loss = fresh.pause_on_focus_loss;
     g_display_held = false;
     ShowOnMonitor();
     Save();

@@ -7,10 +7,12 @@
 #include <condition_variable>
 #include <deque>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <vector>
 
 #include "audio/audio.h"
+#include "dsound/dsound.h"
 #include "xbe/xbe.h"
 #include "xdk/hle.h"
 #include "xdk/dsp_image.h"
@@ -699,7 +701,14 @@ void MixVoice(Voice& v, float* bins, uint32_t frames) {
     v.itd = itd;
 }
 
+// pause on focus loss: no voice moves and the sample clock stands still
+std::atomic<bool> g_paused{false};
+
 void Render(float* out, uint32_t frames) {
+    if (g_paused) {
+        std::fill(out, out + size_t(frames) * 2, 0.0f);
+        return;
+    }
     static std::vector<float> bins;  // the output thread alone renders
     bins.assign(size_t(frames) * kBins, 0.0f);
     std::lock_guard<std::recursive_mutex> lock(g_lock);
@@ -925,12 +934,27 @@ HLE_STDCALL(IDirectSound_Release, 1) { return 0; }
 HLE_STDCALL(DirectSoundUseFullHRTF, 0) { return 0; }
 // DirectSoundUseLightHRTF runs its own code: it fills the 3D function table XACT's own 3D pass calls
 
+// paused time the sample clock leaves out
+static std::mutex g_pause_lock;
+static std::chrono::steady_clock::duration g_paused_for{};
+static std::chrono::steady_clock::time_point g_paused_since;
+
+void dsound::SetPaused(bool paused) {
+    std::lock_guard<std::mutex> lock(g_pause_lock);
+    if (g_paused.exchange(paused) == paused) return;
+    auto now = std::chrono::steady_clock::now();
+    if (paused) g_paused_since = now;
+    else g_paused_for += now - g_paused_since;
+}
+
 // the APU's 48 kHz sample counter, a 32 bit register that wraps
 static uint32_t SampleTime() {
     using namespace std::chrono;
     using Samples = duration<int64_t, std::ratio<1, audio::kRate>>;
     static const steady_clock::time_point start = steady_clock::now();
-    return uint32_t(duration_cast<Samples>(steady_clock::now() - start).count());
+    std::lock_guard<std::mutex> lock(g_pause_lock);
+    steady_clock::time_point now = g_paused ? g_paused_since : steady_clock::now();
+    return uint32_t(duration_cast<Samples>(now - start - g_paused_for).count());
 }
 
 HLE_STDCALL(DirectSoundGetSampleTime, 0) { return SampleTime(); }
