@@ -57,6 +57,7 @@ void LoadRdr(const void* table) {
     s.monitor = t["monitor"].value_or(s.monitor);
     s.fps_counter = t["fps_counter"].value_or(s.fps_counter);
     s.colour_blind = std::min(t["colour_blind"].value_or(s.colour_blind), 3u);
+    s.contrast = std::min(t["contrast"].value_or(s.contrast), 100u);
     s.hdr_output = t["hdr_output"].value_or(s.hdr_output);
     s.smaa = t["smaa"].value_or(s.smaa);
     s.pause_on_focus_loss = t["pause_on_focus_loss"].value_or(s.pause_on_focus_loss);
@@ -89,6 +90,7 @@ void SaveRdr(void* table) {
     t.insert("monitor", s.monitor);
     t.insert("fps_counter", s.fps_counter);
     t.insert("colour_blind", int64_t(s.colour_blind));
+    t.insert("contrast", int64_t(s.contrast));
     t.insert("hdr_output", s.hdr_output);
     t.insert("smaa", s.smaa);
     t.insert("pause_on_focus_loss", s.pause_on_focus_loss);

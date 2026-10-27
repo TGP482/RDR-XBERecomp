@@ -13,6 +13,7 @@ struct RdrSettings {
     std::string monitor;  // its device name, \\.\DISPLAY2; empty the primary
     bool fps_counter = false;
     uint32_t colour_blind = 0;  // 0 off, 1 protanopia, 2 deuteranopia, 3 tritanopia
+    uint32_t contrast = 50;     // 0 to 100, 50 leaves the picture alone
     bool hdr_output = true;  // HDR10 on a display with Windows HDR on
     bool smaa = false;
     bool pause_on_focus_loss = true;  // the game and its sound stop while the window is in the background

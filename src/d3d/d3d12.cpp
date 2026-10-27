@@ -948,6 +948,7 @@ private:
     DXGI_FORMAT smaa_fmt_ = DXGI_FORMAT_UNKNOWN;
     uint8_t ramp_[768] = {};
     bool ramp_dirty_ = false;
+    uint32_t contrast_set_ = 50;  // the contrast setting the lookup holds
     bool gamma_ = false;
     Target* bound_rt_ = nullptr;
     Target* bound_ds_ = nullptr;
@@ -1159,6 +1160,8 @@ void D3D12Backend::CreateGammaLut() {
     D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_B8G8R8A8_UNORM, 256, 1);
     dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &td, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
                                   IID_PPV_ARGS(&lut_));
+    // identity until the game sets its brightness ramp, so contrast works without one
+    for (int i = 0; i < 768; i++) ramp_[i] = uint8_t(i & 0xFF);
 }
 
 void D3D12Backend::LoadSettings() {
@@ -3368,18 +3371,28 @@ constexpr int kRampRed = 0;
 constexpr int kRampGreen = 256;
 constexpr int kRampBlue = 512;
 
+// Contrast from 0 to 100, 50 leaves the image unchanged: an S-curve around mid grey with a slope of 0.5 to 2, black
+// and white fixed. It goes after the game's brightness ramp.
+uint8_t ApplyContrast(uint8_t value, float slope) {
+    float x = float(value) / 255.0f;
+    float y = x < 0.5f ? 0.5f * std::pow(2.0f * x, slope) : 1.0f - 0.5f * std::pow(2.0f - 2.0f * x, slope);
+    return uint8_t(std::lround(std::clamp(y, 0.0f, 1.0f) * 255.0f));
+}
+
 void D3D12Backend::UploadGammaRamp() {
     constexpr uint32_t kRampBytes = 256 * 4;  // one BGRA texel per ramp entry
     ramp_dirty_ = false;
+    contrast_set_ = app::Rdr().contrast;
+    float slope = std::exp2((float(contrast_set_) - 50.0f) / 50.0f);
     Alloc a = Upload(kRampBytes + D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
     bool identity = true;
     for (int i = 0; i < 256; i++) {
         uint8_t* p = a.cpu + i * 4;
-        p[0] = ramp_[kRampBlue + i];
-        p[1] = ramp_[kRampGreen + i];
-        p[2] = ramp_[kRampRed + i];
+        p[0] = ApplyContrast(ramp_[kRampBlue + i], slope);
+        p[1] = ApplyContrast(ramp_[kRampGreen + i], slope);
+        p[2] = ApplyContrast(ramp_[kRampRed + i], slope);
         p[3] = 255;
-        identity &= ramp_[kRampRed + i] == i && ramp_[kRampGreen + i] == i && ramp_[kRampBlue + i] == i;
+        identity &= p[0] == i && p[1] == i && p[2] == i;
     }
     gamma_ = !identity;
     Transition(lut_.Get(), lut_state_, D3D12_RESOURCE_STATE_COPY_DEST);
@@ -3718,7 +3731,7 @@ void D3D12Backend::Present(const Surface& front) {
     Target* t = EnsureTarget(front, false);
     if (t && LatchCpuWrite(*t)) UploadTarget(*t, front);
     if (t) Resolve(*t);
-    if (ramp_dirty_) UploadGammaRamp();
+    if (ramp_dirty_ || contrast_set_ != app::Rdr().contrast) UploadGammaRamp();
     Transition(lut_.Get(), lut_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
     uint32_t bi = swap_->GetCurrentBackBufferIndex();
