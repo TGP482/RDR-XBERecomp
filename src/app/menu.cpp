@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iterator>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -19,6 +20,7 @@
 #include <imgui.h>
 
 #include "app/app.h"
+#include "app/display.h"
 #include "app/game_settings.h"
 #include "app/menu.h"
 #include "app/panel_colors.h"
@@ -45,6 +47,7 @@ constexpr int kRenderStep = 5;
 enum class RowId {
     Heading,
     Bind,
+    Monitor,
     DisplayMode,
     Resolution,
     RenderResolution,
@@ -82,6 +85,7 @@ struct Row {
 
 constexpr Row kSettingsRows[] = {
     {RowId::Heading, "DISPLAY"},
+    {RowId::Monitor, "MONITOR"},
     {RowId::DisplayMode, "DISPLAY MODE"},
     {RowId::Resolution, "RESOLUTION"},
     {RowId::RenderResolution, "RENDER RESOLUTION"},
@@ -207,6 +211,7 @@ bool SameMode(const Mode& a, const Mode& b) { return a.width == b.width && a.hei
 
 // the display rows' settings, which wait for Apply on the panel
 struct DisplayChoice {
+    std::string monitor;
     DisplayMode mode;
     uint32_t width;
     uint32_t height;
@@ -215,18 +220,16 @@ struct DisplayChoice {
 
 DisplayChoice CurrentDisplay() {
     const Settings& s = Get();
-    return {s.display_mode, s.width, s.height};
+    return {Rdr().monitor, s.display_mode, s.width, s.height};
 }
 
-// the game window's monitor modes, smallest first so Left steps down
-std::vector<Mode> ReadModes() {
-    MONITORINFOEXW mi{};
-    mi.cbSize = sizeof(mi);
-    GetMonitorInfoW(MonitorFromWindow(static_cast<HWND>(Window()), MONITOR_DEFAULTTOPRIMARY), &mi);
+// the monitor's modes, smallest first so Left steps down; the primary's for empty
+std::vector<Mode> ReadModes(const std::string& monitor) {
+    std::wstring device(monitor.begin(), monitor.end());
     std::vector<Mode> modes;
     DEVMODEW dm{};
     dm.dmSize = sizeof(dm);
-    for (DWORD i = 0; EnumDisplaySettingsW(mi.szDevice, i, &dm); i++) {
+    for (DWORD i = 0; EnumDisplaySettingsW(device.empty() ? nullptr : device.c_str(), i, &dm); i++) {
         if (dm.dmBitsPerPel < 32 || dm.dmPelsWidth < 640) continue;
         Mode m{dm.dmPelsWidth, dm.dmPelsHeight};
         auto same = [&](const Mode& o) { return SameMode(o, m); };
@@ -238,15 +241,34 @@ std::vector<Mode> ReadModes() {
     return modes;
 }
 
-const std::vector<Mode>& Modes() {
-    static const std::vector<Mode> modes = ReadModes();
-    return modes;
+const std::vector<Mode>& Modes(const std::string& monitor) {
+    static std::map<std::string, std::vector<Mode>> cache;
+    auto [it, fresh] = cache.try_emplace(monitor);
+    if (fresh) it->second = ReadModes(monitor);
+    return it->second;
 }
 
-Mode ShownMode(const DisplayChoice& d) { return d.width && d.height ? Mode{d.width, d.height} : Desktop(); }
+// the setting's monitor in the list, the primary's index when it is not connected
+int MonitorIndex(const std::vector<Display>& list, const std::string& monitor) {
+    int primary = 0;
+    for (size_t i = 0; i < list.size(); i++) {
+        if (list[i].device == monitor) return int(i);
+        if (list[i].primary) primary = int(i);
+    }
+    return primary;
+}
+
+Mode MonitorDesktop(const std::string& monitor) {
+    std::vector<Display> list = Displays();
+    return list.empty() ? Desktop() : list[size_t(MonitorIndex(list, monitor))].desktop;
+}
+
+Mode ShownMode(const DisplayChoice& d) {
+    return d.width && d.height ? Mode{d.width, d.height} : MonitorDesktop(d.monitor);
+}
 
 void StepResolution(DisplayChoice& d, int step) {
-    const std::vector<Mode>& modes = Modes();
+    const std::vector<Mode>& modes = Modes(d.monitor);
     if (modes.empty()) return;
     Mode now = ShownMode(d);
     int index = 0;
@@ -255,19 +277,39 @@ void StepResolution(DisplayChoice& d, int step) {
     }
     Mode m = modes[size_t(Wrap(index, step, int(modes.size())))];
     // the desktop's own mode is kept as 0, which follows the desktop
-    bool native = SameMode(m, Desktop());
+    bool native = SameMode(m, MonitorDesktop(d.monitor));
     d.width = native ? 0 : m.width;
     d.height = native ? 0 : m.height;
 }
 
+// another monitor starts on its own desktop mode
+void StepMonitor(DisplayChoice& d, int step) {
+    std::vector<Display> list = Displays();
+    if (list.empty()) return;
+    const Display& next = list[size_t(Wrap(MonitorIndex(list, d.monitor), step, int(list.size())))];
+    if (next.device == d.monitor) return;
+    d.monitor = next.device;
+    d.width = 0;
+    d.height = 0;
+}
+
 void StepDisplay(RowId id, int step, DisplayChoice& d) {
-    if (id == RowId::DisplayMode) d.mode = DisplayMode(Wrap(int(d.mode), step, 3));
+    if (id == RowId::Monitor) StepMonitor(d, step);
+    else if (id == RowId::DisplayMode) d.mode = DisplayMode(Wrap(int(d.mode), step, 3));
     else StepResolution(d, step);
 }
 
 std::string ModeText(const Mode& m) { return std::to_string(m.width) + "x" + std::to_string(m.height); }
 
+std::string MonitorText(const DisplayChoice& d) {
+    std::vector<Display> list = Displays();
+    if (list.empty()) return "PRIMARY";
+    const Display& m = list[size_t(MonitorIndex(list, d.monitor))];
+    return std::to_string(m.number) + ": " + ModeText(m.desktop) + (m.primary ? " (PRIMARY)" : "");
+}
+
 std::string DisplayText(RowId id, const DisplayChoice& d) {
+    if (id == RowId::Monitor) return MonitorText(d);
     if (id == RowId::DisplayMode) return kDisplayModeNames[std::min(uint32_t(d.mode), 2u)];
     return ModeText(ShownMode(d));
 }
@@ -382,11 +424,11 @@ std::string Text(RowId id, Settings& s) {
 
 // Changes
 
-// display mode and resolution wait for Apply, as Windows' display settings do; closing drops them
+// the monitor, display mode and resolution wait for Apply, as Windows' display settings do; closing drops them
 std::atomic<bool> g_display_held{false};
 DisplayChoice g_held;
 
-bool DisplayRow(RowId id) { return id == RowId::DisplayMode || id == RowId::Resolution; }
+bool DisplayRow(RowId id) { return id == RowId::Monitor || id == RowId::DisplayMode || id == RowId::Resolution; }
 
 void HoldDisplay(RowId id, int step) {
     if (!g_display_held) g_held = CurrentDisplay();
@@ -396,11 +438,12 @@ void HoldDisplay(RowId id, int step) {
 
 void ApplyHeld() {
     Settings& s = Get();
+    Rdr().monitor = g_held.monitor;
     s.display_mode = g_held.mode;
     s.width = g_held.width;
     s.height = g_held.height;
     g_display_held = false;
-    ApplyDisplay();
+    ShowOnMonitor();
     Save();
 }
 
@@ -439,9 +482,10 @@ void RestoreDefaults(int page) {
     std::string join_ip = Get().join_ip;  // no row on the panel
     Get() = Settings{};
     Get().join_ip = join_ip;
+    r.monitor = fresh.monitor;
     r.fps_counter = fresh.fps_counter;
     g_display_held = false;
-    ApplyDisplay();
+    ShowOnMonitor();
     Save();
 }
 

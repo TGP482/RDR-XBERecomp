@@ -9,6 +9,7 @@
 namespace app {
 
 struct RdrSettings {
+    std::string monitor;  // its device name, \\.\DISPLAY2; empty the primary
     bool fps_counter = false;
     // the mouse's look, the aim ones times the others while aiming
     float mouse_sensitivity = 1.0f;  // horizontal

@@ -1,0 +1,72 @@
+#include "app/display.h"
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+#include <algorithm>
+#include <cstdlib>
+
+#include "app/game_settings.h"
+
+namespace app {
+
+namespace {
+
+HMONITOR MonitorHandle(const std::string& device) {
+    struct Find {
+        std::wstring device;
+        HMONITOR found;
+    } find{std::wstring(device.begin(), device.end()), nullptr};
+    auto match = [](HMONITOR mon, HDC, LPRECT, LPARAM p) -> BOOL {
+        auto* f = reinterpret_cast<Find*>(p);
+        MONITORINFOEXW mi{};
+        mi.cbSize = sizeof(mi);
+        if (GetMonitorInfoW(mon, &mi) && f->device == mi.szDevice) f->found = mon;
+        return !f->found;
+    };
+    if (!device.empty()) EnumDisplayMonitors(nullptr, nullptr, match, LPARAM(&find));
+    return find.found ? find.found : MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+}
+
+}  // namespace
+
+std::vector<Display> Displays() {
+    std::vector<Display> out;
+    auto add = [](HMONITOR mon, HDC, LPRECT, LPARAM list) -> BOOL {
+        MONITORINFOEXW mi{};
+        mi.cbSize = sizeof(mi);
+        DEVMODEW dm{};
+        dm.dmSize = sizeof(dm);
+        if (!GetMonitorInfoW(mon, &mi) || !EnumDisplaySettingsW(mi.szDevice, ENUM_REGISTRY_SETTINGS, &dm)) return TRUE;
+        Display d{std::string(), 0, {dm.dmPelsWidth, dm.dmPelsHeight}, (mi.dwFlags & MONITORINFOF_PRIMARY) != 0};
+        for (const wchar_t* c = mi.szDevice; *c; c++) d.device += char(*c);
+        size_t digits = d.device.find_last_not_of("0123456789") + 1;
+        d.number = digits < d.device.size() ? std::atoi(d.device.c_str() + digits) : 0;
+        reinterpret_cast<std::vector<Display>*>(list)->push_back(d);
+        return TRUE;
+    };
+    EnumDisplayMonitors(nullptr, nullptr, add, LPARAM(&out));
+    std::sort(out.begin(), out.end(), [](const Display& a, const Display& b) { return a.number < b.number; });
+    return out;
+}
+
+void ShowOnMonitor() {
+    HWND hwnd = static_cast<HWND>(Window());
+    if (!hwnd) return;
+    HMONITOR mon = MonitorHandle(Rdr().monitor);
+    if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL) != mon) {
+        MONITORINFO mi{};
+        mi.cbSize = sizeof(mi);
+        GetMonitorInfoW(mon, &mi);
+        const RECT& r = mi.rcMonitor;
+        SetWindowPos(hwnd, nullptr, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    ApplyDisplay();
+}
+
+}  // namespace app

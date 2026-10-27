@@ -42,6 +42,7 @@ RdrSettings& Rdr() {
 void LoadRdr(const void* table) {
     const toml::table& t = *static_cast<const toml::table*>(table);
     RdrSettings& s = Rdr();
+    s.monitor = t["monitor"].value_or(s.monitor);
     s.fps_counter = t["fps_counter"].value_or(s.fps_counter);
     s.mouse_sensitivity = ReadFloat(t, "mouse_sensitivity", s.mouse_sensitivity);
     s.mouse_vertical_sensitivity = ReadFloat(t, "mouse_vertical_sensitivity", s.mouse_vertical_sensitivity);
@@ -65,6 +66,7 @@ void LoadRdr(const void* table) {
 void SaveRdr(void* table) {
     toml::table& t = *static_cast<toml::table*>(table);
     const RdrSettings& s = Rdr();
+    t.insert("monitor", s.monitor);
     t.insert("fps_counter", s.fps_counter);
     t.insert("mouse_sensitivity", double(s.mouse_sensitivity));
     t.insert("mouse_vertical_sensitivity", double(s.mouse_vertical_sensitivity));

@@ -9,6 +9,7 @@
 #include <windows.h>
 
 #include "app/cursor.h"
+#include "app/display.h"
 #include "app/menu.h"
 #include "core/input.h"
 
@@ -16,7 +17,10 @@ namespace app {
 
 void InitInput() { input::LoadBindings(); }
 
-void WindowUp(void* hwnd) { input::StartMouse(hwnd); }
+void WindowUp(void* hwnd) {
+    input::StartMouse(hwnd);
+    ShowOnMonitor();
+}
 
 bool WindowMessage(void*, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* result) {
     switch (msg) {
