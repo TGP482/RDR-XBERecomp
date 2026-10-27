@@ -38,6 +38,7 @@ constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, kFpsCa
 // in DisplayMode order
 const char* const kDisplayModeNames[] = {"FULLSCREEN", "BORDERLESS", "WINDOWED"};
 const char* const kDumpFormatNames[] = {"PNG", "DDS"};
+const char* const kColourBlindNames[] = {"OFF", "PROTANOPIA", "DEUTERANOPIA", "TRITANOPIA"};
 
 // render resolution in percent of the output
 constexpr int kRenderMin = 20;
@@ -54,6 +55,7 @@ enum class RowId {
     Vsync,
     MaxFps,
     FpsCounter,
+    ColourBlind,
     Aniso,
     PauseOnFocusLoss,
     TextureReplacement,
@@ -93,6 +95,7 @@ constexpr Row kSettingsRows[] = {
     {RowId::Vsync, "VERTICAL SYNC"},
     {RowId::MaxFps, "MAX FRAME RATE"},
     {RowId::FpsCounter, "FPS COUNTER"},
+    {RowId::ColourBlind, "COLOUR BLIND MODE"},
     {RowId::Heading, "GRAPHICS"},
     {RowId::Aniso, "ANISOTROPIC FILTERING"},
     {RowId::Heading, "GENERAL"},
@@ -375,6 +378,7 @@ void Step(RowId id, int step, Settings& s) {
         case RowId::MaxFps: StepTable(kFpsCaps, s.fps_cap, step); break;
         case RowId::Aniso: StepTable(kAnisoValues, s.aniso, step); break;
         case RowId::DumpFormat: s.texture_dump_format = uint32_t(Wrap(int(s.texture_dump_format), step, 2)); break;
+        case RowId::ColourBlind: StepName(Rdr().colour_blind, kColourBlindNames, step); break;
         // 10% to 90% in steps of 10
         case RowId::WalkSpeed: Rdr().walk_speed = uint32_t(StepRange(int(Rdr().walk_speed), 10, 90, 10, step)); break;
         default: StepGyro(id, step); break;
@@ -418,6 +422,7 @@ std::string Text(RowId id, Settings& s) {
         case RowId::MaxFps: return FpsCapText(kFpsCaps[NearestIndex(kFpsCaps, s.fps_cap)]);
         case RowId::Aniso: return kAnisoNames[NearestIndex(kAnisoValues, s.aniso)];
         case RowId::DumpFormat: return kDumpFormatNames[std::min(s.texture_dump_format, 1u)];
+        case RowId::ColourBlind: return NameText(Rdr().colour_blind, kColourBlindNames);
         case RowId::WalkSpeed: {
             uint32_t v = Rdr().walk_speed;
             return std::to_string(v) + (v == 50 ? "% (DEFAULT)" : "%");
@@ -488,6 +493,7 @@ void RestoreDefaults(int page) {
     Get().join_ip = join_ip;
     r.monitor = fresh.monitor;
     r.fps_counter = fresh.fps_counter;
+    r.colour_blind = fresh.colour_blind;
     r.pause_on_focus_loss = fresh.pause_on_focus_loss;
     g_display_held = false;
     ShowOnMonitor();
