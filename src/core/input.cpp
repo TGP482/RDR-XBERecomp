@@ -177,6 +177,7 @@ constexpr Target kActions[] = {
     {{"duel_draw", "DRAW", "Up"}, kStickUpTarget},
     {{"pause", "PAUSE", "Escape"}, kButtonTarget + kStart},
     {{"back", "BACK", "Backspace"}, kButtonTarget + 5},
+    {{"toggle_hud", "TOGGLE HUD", ""}, kHostKey, KeyEvent::HideHud},
     {{"toggle_textures", "TOGGLE TEXTURE REPLACEMENT", ""}, kHostKey, KeyEvent::ToggleTextures},
     {{"settings_panel", "SETTINGS PANEL", "F10"}, kHostKey, KeyEvent::SettingsPanel},
 };
