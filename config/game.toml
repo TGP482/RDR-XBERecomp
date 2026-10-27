@@ -274,6 +274,7 @@ XNetUnregisterKey                                    = 0
 XNetXnAddrToInAddr                                   = 0
 XOnlineCleanup                                       = 0x3579D9
 XOnlineStartup                                       = 0x3578DC
+XOnlineGetUsers                                      = 0x357436  # by hand: mov ecx, [0x68A014] then the users read 0x35825D
 
 [data]
 D3D_DeferredTextureState    = 0x349360
