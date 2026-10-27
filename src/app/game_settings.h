@@ -16,6 +16,7 @@ struct RdrSettings {
     bool hdr_output = true;  // HDR10 on a display with Windows HDR on
     bool smaa = false;
     bool pause_on_focus_loss = true;  // the game and its sound stop while the window is in the background
+    uint32_t audio_output = 0;        // audio::kOutputAuto, kOutputStereo, kOutputSurround or kOutputMono
     // the mouse's look, the aim ones times the others while aiming
     float mouse_sensitivity = 1.0f;  // horizontal
     float mouse_vertical_sensitivity = 1.0f;

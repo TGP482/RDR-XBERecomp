@@ -24,6 +24,7 @@
 #include "app/game_settings.h"
 #include "app/menu.h"
 #include "app/panel_colors.h"
+#include "audio/audio.h"
 #include "core/input.h"
 
 namespace app {
@@ -39,6 +40,9 @@ constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, kFpsCa
 const char* const kDisplayModeNames[] = {"FULLSCREEN", "BORDERLESS", "WINDOWED"};
 const char* const kDumpFormatNames[] = {"PNG", "DDS"};
 const char* const kColourBlindNames[] = {"OFF", "PROTANOPIA", "DEUTERANOPIA", "TRITANOPIA"};
+constexpr uint32_t kAudioOutputs[] = {audio::kOutputAuto, audio::kOutputMono, audio::kOutputStereo,
+                                      audio::kOutputSurround};
+const char* const kAudioOutputNames[] = {"AUTOMATIC", "MONO", "2.0 STEREO", "5.1 SURROUND"};
 
 // render resolution in percent of the output
 constexpr int kRenderMin = 20;
@@ -60,6 +64,7 @@ enum class RowId {
     Aniso,
     Smaa,
     PauseOnFocusLoss,
+    AudioOutput,
     TextureReplacement,
     TextureDumping,
     DumpFormat,
@@ -104,6 +109,7 @@ constexpr Row kSettingsRows[] = {
     {RowId::Aniso, "ANISOTROPIC FILTERING"},
     {RowId::Heading, "GENERAL"},
     {RowId::PauseOnFocusLoss, "PAUSE ON FOCUS LOSS"},
+    {RowId::AudioOutput, "AUDIO OUTPUT"},
     {RowId::Heading, "TEXTURES"},
     {RowId::TextureReplacement, "TEXTURE REPLACEMENT"},
     {RowId::TextureDumping, "TEXTURE DUMPING"},
@@ -386,6 +392,10 @@ void Step(RowId id, int step, Settings& s) {
         case RowId::Aniso: StepTable(kAnisoValues, s.aniso, step); break;
         case RowId::DumpFormat: s.texture_dump_format = uint32_t(Wrap(int(s.texture_dump_format), step, 2)); break;
         case RowId::ColourBlind: StepName(Rdr().colour_blind, kColourBlindNames, step); break;
+        case RowId::AudioOutput:
+            StepTable(kAudioOutputs, Rdr().audio_output, step);
+            audio::SetOutputMode(Rdr().audio_output);
+            break;
         // 10% to 90% in steps of 10
         case RowId::WalkSpeed: Rdr().walk_speed = uint32_t(StepRange(int(Rdr().walk_speed), 10, 90, 10, step)); break;
         default: StepGyro(id, step); break;
@@ -431,6 +441,7 @@ std::string Text(RowId id, Settings& s) {
         case RowId::Aniso: return kAnisoNames[NearestIndex(kAnisoValues, s.aniso)];
         case RowId::DumpFormat: return kDumpFormatNames[std::min(s.texture_dump_format, 1u)];
         case RowId::ColourBlind: return NameText(Rdr().colour_blind, kColourBlindNames);
+        case RowId::AudioOutput: return kAudioOutputNames[NearestIndex(kAudioOutputs, Rdr().audio_output)];
         case RowId::WalkSpeed: {
             uint32_t v = Rdr().walk_speed;
             return std::to_string(v) + (v == 50 ? "% (DEFAULT)" : "%");
@@ -505,6 +516,8 @@ void RestoreDefaults(int page) {
     r.hdr_output = fresh.hdr_output;
     r.smaa = fresh.smaa;
     r.pause_on_focus_loss = fresh.pause_on_focus_loss;
+    r.audio_output = fresh.audio_output;
+    audio::SetOutputMode(r.audio_output);
     g_display_held = false;
     ShowOnMonitor();
     Save();

@@ -341,9 +341,6 @@ void Complete(Voice& v, Packet& pk, uint32_t status) {
     }
 }
 
-// the console's stereo downmix of the speaker bins: centre and back pair at -3 dB, the sub dropped
-constexpr float kFold = 0.707f;
-
 // A voice with no speaker bin and no effects image plays its loudest bin on the front pair; with speaker bins the
 // crosstalk bins join their speakers and effect sends are dropped. Without the title's image nothing reads them.
 void RouteWithoutImage(const Voice& v, Gains& g) {
@@ -706,7 +703,7 @@ std::atomic<bool> g_paused{false};
 
 void Render(float* out, uint32_t frames) {
     if (g_paused) {
-        std::fill(out, out + size_t(frames) * 2, 0.0f);
+        std::fill(out, out + size_t(frames) * audio::kChannels, 0.0f);
         return;
     }
     static std::vector<float> bins;  // the output thread alone renders
@@ -717,10 +714,10 @@ void Render(float* out, uint32_t frames) {
         MixVoice(v, bins.data(), frames);
     }
     if (dsp::Loaded()) dsp::Run(bins.data(), frames);
+    // the speaker bins in their order, the output folds them for the device
+    static_assert(kFrontLeft == 0 && kBackRight + 1 == audio::kChannels);
     for (uint32_t i = 0; i < frames; i++) {
-        const float* b = &bins[size_t(i) * kBins];
-        out[i * 2] = std::clamp(b[kFrontLeft] + kFold * (b[kCentre] + b[kBackLeft]), -1.0f, 1.0f);
-        out[i * 2 + 1] = std::clamp(b[kFrontRight] + kFold * (b[kCentre] + b[kBackRight]), -1.0f, 1.0f);
+        std::copy_n(&bins[size_t(i) * kBins], audio::kChannels, out + size_t(i) * audio::kChannels);
     }
 }
 
@@ -966,7 +963,13 @@ bool ReadSampleTime(X86Context& ctx, uint8_t*) {
 }
 
 HLE_STDCALL(IDirectSound_GetSpeakerConfig, 2) {
-    W32(a[1], 0);  // DSSPEAKER_STEREO
+    constexpr uint32_t kStereo = 0;
+    constexpr uint32_t kMono = 1;                     // DSSPEAKER_MONO
+    constexpr uint32_t kSurroundAc3 = 0x2 | 0x10000;  // DSSPEAKER_SURROUND | DSSPEAKER_ENABLE_AC3
+    uint32_t config = kStereo;
+    if (audio::IsMono()) config = kMono;
+    if (audio::IsSurround()) config = kSurroundAc3;
+    W32(a[1], config);
     return 0;
 }
 // (this, effect, offset, data, size, flags): writes the effect's state
