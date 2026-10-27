@@ -30,6 +30,7 @@ struct RdrSettings {
     float pad_aim_horizontal_sensitivity = 1.0f;
     float pad_aim_vertical_sensitivity = 1.0f;
     bool invert_pad_x = false;
+    uint32_t vibration_strength = 100;  // percent of the game's rumble, 10 to 200
     gyro::Settings gyro;
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default
 };

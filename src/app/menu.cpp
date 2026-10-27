@@ -79,6 +79,7 @@ enum class RowId {
     PadAimHorizontal,
     PadAimVertical,
     InvertPadX,
+    VibrationStrength,
     GyroAiming,
     GyroSensitivity,
     GyroAxis,
@@ -136,6 +137,7 @@ constexpr Row kControllerRows[] = {
     {RowId::PadAimHorizontal, "AIM HORIZONTAL SENSITIVITY"},
     {RowId::PadAimVertical, "AIM VERTICAL SENSITIVITY"},
     {RowId::InvertPadX, "INVERT X-AXIS"},
+    {RowId::VibrationStrength, "VIBRATION STRENGTH"},
     {RowId::Heading, "GYRO"},
     {RowId::GyroAiming, "GYRO AIMING"},
     {RowId::GyroSensitivity, "GYRO SENSITIVITY"},
@@ -401,6 +403,12 @@ void Step(RowId id, int step, Settings& s) {
             break;
         // 10% to 90% in steps of 10
         case RowId::WalkSpeed: Rdr().walk_speed = uint32_t(StepRange(int(Rdr().walk_speed), 10, 90, 10, step)); break;
+        // 10% to 200% in steps of 10
+        case RowId::VibrationStrength: {
+            uint32_t& v = Rdr().vibration_strength;
+            v = uint32_t(StepRange(int(v), 10, 200, 10, step));
+            break;
+        }
         default: StepGyro(id, step); break;
     }
 }
@@ -448,6 +456,10 @@ std::string Text(RowId id, Settings& s) {
         case RowId::WalkSpeed: {
             uint32_t v = Rdr().walk_speed;
             return std::to_string(v) + (v == 50 ? "% (DEFAULT)" : "%");
+        }
+        case RowId::VibrationStrength: {
+            uint32_t v = Rdr().vibration_strength;
+            return std::to_string(v) + (v == 100 ? "% (DEFAULT)" : "%");
         }
         default: return GyroText(id);
     }
@@ -506,6 +518,7 @@ void RestoreDefaults(int page) {
         r.pad_aim_horizontal_sensitivity = fresh.pad_aim_horizontal_sensitivity;
         r.pad_aim_vertical_sensitivity = fresh.pad_aim_vertical_sensitivity;
         r.invert_pad_x = fresh.invert_pad_x;
+        r.vibration_strength = fresh.vibration_strength;
         r.gyro = fresh.gyro;
         Save();
         return;

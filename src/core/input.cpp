@@ -551,6 +551,9 @@ void Rumble(int port, uint16_t left, uint16_t right) {
         right = 0;
     }
     if (port == 0) g_rumbling = left || right;
+    uint32_t strength = app::Rdr().vibration_strength;
+    left = uint16_t(std::min<uint32_t>(left * strength / 100, 0xFFFF));
+    right = uint16_t(std::min<uint32_t>(right * strength / 100, 0xFFFF));
     SetMotors(port, left, right);
 }
 

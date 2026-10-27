@@ -74,6 +74,7 @@ void LoadRdr(const void* table) {
         ReadFloat(t, "pad_aim_horizontal_sensitivity", s.pad_aim_horizontal_sensitivity);
     s.pad_aim_vertical_sensitivity = ReadFloat(t, "pad_aim_vertical_sensitivity", s.pad_aim_vertical_sensitivity);
     s.invert_pad_x = t["invert_pad_x"].value_or(s.invert_pad_x);
+    s.vibration_strength = std::clamp(t["vibration_strength"].value_or(s.vibration_strength), 10u, 200u);
     LoadGyro(t, s.gyro);
     if (const toml::table* keys = t["keys"].as_table()) {
         for (auto&& [id, value] : *keys) {
@@ -103,6 +104,7 @@ void SaveRdr(void* table) {
     t.insert("pad_aim_horizontal_sensitivity", double(s.pad_aim_horizontal_sensitivity));
     t.insert("pad_aim_vertical_sensitivity", double(s.pad_aim_vertical_sensitivity));
     t.insert("invert_pad_x", s.invert_pad_x);
+    t.insert("vibration_strength", int64_t(s.vibration_strength));
     SaveGyro(t, s.gyro);
     toml::table keys;
     for (const auto& [id, value] : s.keys) keys.insert(id, value);
