@@ -46,6 +46,11 @@ std::atomic<bool>& HdrDisplay() {
     return on;
 }
 
+std::atomic<bool>& HudHidden() {
+    static std::atomic<bool> hidden{false};
+    return hidden;
+}
+
 void LoadRdr(const void* table) {
     const toml::table& t = *static_cast<const toml::table*>(table);
     RdrSettings& s = Rdr();

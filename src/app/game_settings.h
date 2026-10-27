@@ -35,6 +35,8 @@ struct RdrSettings {
 };
 
 RdrSettings& Rdr();
+// the toggle HUD key's state, not saved
+std::atomic<bool>& HudHidden();
 // the window's display has Windows HDR on, as the renderer last saw
 std::atomic<bool>& HdrDisplay();
 // GameInfo hooks: the settings file's toml::table

@@ -876,7 +876,7 @@ void DrawUi(double fps) {
 }
 
 // The settings panel key opens and closes, Escape closes; F10 is a system key, so Windows' menu key handling is kept
-// away from it. The texture replacement key flips the setting. A key that answers a capture does neither.
+// away from it. The texture replacement and HUD keys flip theirs. A key that answers a capture does neither.
 bool MenuMessage(uint32_t msg, uintptr_t wp, intptr_t lp) {
     if (msg == WM_SYSKEYUP && wp == VK_F10) return true;
     bool pressed = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && !(lp & (1 << 30));  // bit 30: a held key's repeat
@@ -889,6 +889,10 @@ bool MenuMessage(uint32_t msg, uintptr_t wp, intptr_t lp) {
     }
     if (input::HostKey(input::KeyEvent::ToggleTextures, vk)) {
         ToggleTextureReplacement();
+        return true;
+    }
+    if (input::HostKey(input::KeyEvent::HideHud, vk)) {
+        HudHidden() = !HudHidden();
         return true;
     }
     return false;
