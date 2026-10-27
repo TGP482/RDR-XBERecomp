@@ -8,6 +8,7 @@
 #endif
 #include <windows.h>
 
+#include "app/cursor.h"
 #include "app/menu.h"
 #include "core/input.h"
 
@@ -25,7 +26,7 @@ bool WindowMessage(void*, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* res
         case WM_SETCURSOR:
             // the settings panel's cursor is ImGui's
             if (LOWORD(lp) != HTCLIENT || MenuOpen()) return false;
-            SetCursor(input::CursorShown() ? LoadCursor(nullptr, IDC_ARROW) : nullptr);
+            SetCursor(input::CursorShown() ? static_cast<HCURSOR>(MenuCursor()) : nullptr);
             *result = TRUE;
             return true;
         default:
