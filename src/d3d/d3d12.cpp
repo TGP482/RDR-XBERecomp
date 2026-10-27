@@ -36,6 +36,8 @@
 #include "gpu/backend.h"
 #include "gpu/ext.h"
 #include "gpu/shaders.h"
+#include "gpu/smaa_shader.h"
+#include "gpu/smaa_textures.h"
 #include "gpu/texture.h"
 #include "gpu/texturedumper.h"
 #include "gpu/vertex.h"
@@ -56,6 +58,10 @@ constexpr uint32_t kSrvCount = 3 * 32768;
 constexpr uint32_t kSamplerCount = 2048;
 constexpr uint32_t kRtvCount = 1024;
 constexpr uint32_t kDsvCount = 256;
+constexpr uint32_t kSmaaTargets = 3;  // edges, blend weights, the blended frame
+// views past the swap chain's: SMAA's targets
+constexpr uint32_t kSmaaRtv = 0;
+constexpr uint32_t kPostRtvs = kSmaaRtv + kSmaaTargets;
 constexpr DXGI_FORMAT kBgra = DXGI_FORMAT_B8G8R8A8_UNORM;
 constexpr uint32_t kQueries = 8192;  // occlusion queries in flight, several frames of counted draws
 constexpr uint32_t kNoQuery = ~0u;
@@ -173,6 +179,68 @@ float4 vs(uint id : SV_VertexID) : SV_Position {
     return float4(t * float2(2, -2) + float2(-1, 1), 0, 1);
 }
 float4 psmain() : SV_Target { return colour; }
+)";
+
+const char* kSmaaConfig = R"(
+cbuffer P : register(b1) { float4 metrics; };
+#define SMAA_RT_METRICS metrics
+#define SMAA_CUSTOM_SL
+#define SMAA_THRESHOLD 0.05
+#define SMAA_MAX_SEARCH_STEPS 16
+#define SMAA_MAX_SEARCH_STEPS_DIAG 8
+#define SMAA_CORNER_ROUNDING 25
+SamplerState LinearSampler : register(s0);
+SamplerState PointSampler : register(s1);
+#define SMAATexture2D(tex) Texture2D tex
+#define SMAATexturePass2D(tex) tex
+#define SMAASampleLevelZero(tex, coord) tex.SampleLevel(LinearSampler, coord, 0)
+#define SMAASampleLevelZeroPoint(tex, coord) tex.SampleLevel(PointSampler, coord, 0)
+#define SMAASampleLevelZeroOffset(tex, coord, offset) tex.SampleLevel(LinearSampler, coord, 0, offset)
+#define SMAASample(tex, coord) tex.Sample(LinearSampler, coord)
+#define SMAASamplePoint(tex, coord) tex.Sample(PointSampler, coord)
+#define SMAASampleOffset(tex, coord, offset) tex.Sample(LinearSampler, coord, offset)
+#define SMAAGather(tex, coord) tex.Gather(LinearSampler, coord, 0)
+#define SMAA_FLATTEN [flatten]
+#define SMAA_BRANCH [branch]
+)";
+
+// after kSmaaHlsl; SMAA_PASS 0 finds edges from luma, 1 blend weights, 2 blends the frame
+const char* kSmaaPasses = R"(
+Texture2D tex0 : register(t0);
+Texture2D tex1 : register(t1);
+Texture2D tex2 : register(t2);
+float4 corner(uint id, out float2 uv) {
+    uv = float2((id << 1) & 2, id & 2);
+    return float4(uv * float2(2, -2) + float2(-1, 1), 0, 1);
+}
+#if SMAA_PASS == 0
+struct V { float4 p : SV_Position; float2 uv : TEXCOORD0; float4 o[3] : TEXCOORD1; };
+V vs(uint id : SV_VertexID) {
+    V v;
+    v.p = corner(id, v.uv);
+    SMAAEdgeDetectionVS(v.uv, v.o);
+    return v;
+}
+float4 smaa_edges(V i) : SV_Target { return float4(SMAALumaEdgeDetectionPS(i.uv, i.o, tex0), 0, 0); }
+#elif SMAA_PASS == 1
+struct V { float4 p : SV_Position; float2 uv : TEXCOORD0; float2 pix : TEXCOORD1; float4 o[3] : TEXCOORD2; };
+V vs(uint id : SV_VertexID) {
+    V v;
+    v.p = corner(id, v.uv);
+    SMAABlendingWeightCalculationVS(v.uv, v.pix, v.o);
+    return v;
+}
+float4 smaa_weights(V i) : SV_Target { return SMAABlendingWeightCalculationPS(i.uv, i.pix, i.o, tex0, tex1, tex2, 0); }
+#else
+struct V { float4 p : SV_Position; float2 uv : TEXCOORD0; float4 o : TEXCOORD1; };
+V vs(uint id : SV_VertexID) {
+    V v;
+    v.p = corner(id, v.uv);
+    SMAANeighborhoodBlendingVS(v.uv, v.o);
+    return v;
+}
+float4 smaa_blend(V i) : SV_Target { return SMAANeighborhoodBlendingPS(i.uv, i.o, tex0, tex1); }
+#endif
 )";
 
 float Bits(uint32_t v) {
@@ -620,7 +688,24 @@ private:
     void ResizeSwap();
     void UploadGammaRamp();
     void DrawFrame(Target* t, uint32_t bi);
-    void BlitFrame(Target& t);
+    ID3D12Resource* ShownFrame(Target& t);
+    // Smaa, then its steps in call order
+    struct SmaaLookup {
+        DXGI_FORMAT fmt;
+        uint32_t w;
+        uint32_t h;
+        uint32_t bpp;  // bytes per texel
+        const uint8_t* data;
+    };
+    ID3D12Resource* Smaa(Target& t);
+    bool EnsureSmaaLookups();
+    bool CreateLookupTexture(ComPtr<ID3D12Resource>& r, const SmaaLookup& l);
+    bool EnsureSmaaTargets(DXGI_FORMAT fmt, uint32_t w, uint32_t h);
+    void DrawSmaaPasses(Target& t);
+    void BlitFrame(ID3D12Resource* src, DXGI_FORMAT fmt);
+    D3D12_CPU_DESCRIPTOR_HANDLE PostRtv(uint32_t i);
+    bool CreatePostTarget(ComPtr<ID3D12Resource>& r, D3D12_RESOURCE_STATES& st, DXGI_FORMAT f, uint32_t w, uint32_t h,
+                          uint32_t view);
     void RenderUi();
     void ReleaseOldTextures();
     void ResetFrame();
@@ -759,6 +844,12 @@ private:
     std::vector<CapTex> cap_tex_;
     ComPtr<ID3D12Resource> lut_;
     D3D12_RESOURCE_STATES lut_state_ = D3D12_RESOURCE_STATE_COPY_DEST;
+    ComPtr<ID3D12Resource> smaa_[kSmaaTargets];
+    D3D12_RESOURCE_STATES smaa_state_[kSmaaTargets] = {};
+    ComPtr<ID3D12Resource> smaa_lut_[2];  // area, search
+    uint32_t smaa_w_ = 0;
+    uint32_t smaa_h_ = 0;
+    DXGI_FORMAT smaa_fmt_ = DXGI_FORMAT_UNKNOWN;
     uint8_t ramp_[768] = {};
     bool ramp_dirty_ = false;
     bool gamma_ = false;
@@ -906,7 +997,7 @@ void D3D12Backend::CreateBackBufferViews() {
 void D3D12Backend::CreateHeaps() {
     srv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kSrvCount, true, srv_heap_);
     smp_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, kSamplerCount, true, smp_heap_);
-    rtv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvCount + kFrames, false, rtv_heap_);
+    rtv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvCount + kFrames + kPostRtvs, false, rtv_heap_);
     dsv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, kDsvCount, false, dsv_heap_);
     CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1, true, ui_heap_);
     for (uint32_t i = kRtvCount; i-- > 0;) free_rtv_.push_back(i);
@@ -3189,7 +3280,135 @@ std::array<float, 9> ColourBlindMatrix(uint32_t mode) {
     return m;
 }
 
-void D3D12Backend::BlitFrame(Target& t) {
+constexpr DXGI_FORMAT kSmaaEdgeFormat = DXGI_FORMAT_R8G8_UNORM;
+constexpr DXGI_FORMAT kSmaaWeightFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+constexpr const char* kSmaaEntries[kSmaaTargets] = {"smaa_edges", "smaa_weights", "smaa_blend"};
+
+// one source per pass, each with its own vs
+const char* SmaaSource(int pass) {
+    static const std::string src[kSmaaTargets] = {
+        "#define SMAA_PASS 0\n" + std::string(kSmaaConfig) + kSmaaHlsl + kSmaaPasses,
+        "#define SMAA_PASS 1\n" + std::string(kSmaaConfig) + kSmaaHlsl + kSmaaPasses,
+        "#define SMAA_PASS 2\n" + std::string(kSmaaConfig) + kSmaaHlsl + kSmaaPasses,
+    };
+    return src[pass].c_str();
+}
+
+// t readable, then SMAA's blend of it when on and it can run
+ID3D12Resource* D3D12Backend::ShownFrame(Target& t) {
+    Transition(t.res.Get(), t.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    ID3D12Resource* smaa = app::Rdr().smaa ? Smaa(t) : nullptr;
+    return smaa ? smaa : t.res.Get();
+}
+
+ID3D12Resource* D3D12Backend::Smaa(Target& t) {
+    if (!EnsureSmaaLookups() || !EnsureSmaaTargets(t.fmt, t.w, t.h)) return nullptr;
+    const DXGI_FORMAT out[kSmaaTargets] = {kSmaaEdgeFormat, kSmaaWeightFormat, t.fmt};
+    for (int i = 0; i < int(kSmaaTargets); i++) {
+        if (!EnsurePassPipeline(SmaaSource(i), kSmaaEntries[i], out[i], -1)) return nullptr;
+    }
+    DrawSmaaPasses(t);
+    return smaa_[2].Get();
+}
+
+bool D3D12Backend::EnsureSmaaLookups() {
+    // smaa_textures.h: area 160 x 560 in two channels, search 64 x 16 in one
+    constexpr SmaaLookup area{DXGI_FORMAT_R8G8_UNORM, 160, 560, 2, kSmaaArea};
+    constexpr SmaaLookup search{DXGI_FORMAT_R8_UNORM, 64, 16, 1, kSmaaSearch};
+    static_assert(sizeof(kSmaaArea) == area.w * area.h * area.bpp);
+    static_assert(sizeof(kSmaaSearch) == search.w * search.h * search.bpp);
+    if (smaa_lut_[1]) return true;
+    if (!CreateLookupTexture(smaa_lut_[0], area) || !CreateLookupTexture(smaa_lut_[1], search)) {
+        smaa_lut_[0].Reset();
+        smaa_lut_[1].Reset();
+        return false;
+    }
+    return true;
+}
+
+// filled from l's data, left readable
+bool D3D12Backend::CreateLookupTexture(ComPtr<ID3D12Resource>& r, const SmaaLookup& l) {
+    D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC td = Texture2DDesc(l.fmt, l.w, l.h);
+    D3D12_RESOURCE_STATES st = D3D12_RESOURCE_STATE_COPY_DEST;
+    if (FAILED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &td, st, nullptr, IID_PPV_ARGS(&r)))) {
+        return false;
+    }
+    uint32_t row = l.w * l.bpp;
+    uint32_t pitch = UploadPitch(row);
+    Alloc a = Upload(uint64_t(pitch) * l.h, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
+    for (uint32_t y = 0; y < l.h; y++) std::memcpy(a.cpu + size_t(y) * pitch, l.data + size_t(y) * row, row);
+    D3D12_TEXTURE_COPY_LOCATION dl{r.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
+    D3D12_TEXTURE_COPY_LOCATION sl{a.res, D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT};
+    sl.PlacedFootprint.Offset = a.off;
+    sl.PlacedFootprint.Footprint = {l.fmt, l.w, l.h, 1, pitch};
+    cl_->CopyTextureRegion(&dl, 0, 0, 0, &sl, nullptr);
+    Transition(r.Get(), st, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    return true;
+}
+
+bool D3D12Backend::EnsureSmaaTargets(DXGI_FORMAT fmt, uint32_t w, uint32_t h) {
+    if (smaa_[2] && smaa_w_ == w && smaa_h_ == h && smaa_fmt_ == fmt) return true;
+    const DXGI_FORMAT f[kSmaaTargets] = {kSmaaEdgeFormat, kSmaaWeightFormat, fmt};
+    for (int i = 0; i < int(kSmaaTargets); i++) {
+        if (!CreatePostTarget(smaa_[i], smaa_state_[i], f[i], w, h, kSmaaRtv + i)) {
+            for (auto& r : smaa_) r.Reset();
+            return false;
+        }
+    }
+    smaa_w_ = w;
+    smaa_h_ = h;
+    smaa_fmt_ = fmt;
+    LOGR("d3d12: SMAA %ux%u", w, h);
+    return true;
+}
+
+D3D12_CPU_DESCRIPTOR_HANDLE D3D12Backend::PostRtv(uint32_t i) {
+    return Cpu(rtv_heap_.Get(), kRtvCount + kFrames + i, rtv_inc_);
+}
+
+// a render target with its view at PostRtv(view); the one it replaces goes to garbage
+bool D3D12Backend::CreatePostTarget(ComPtr<ID3D12Resource>& r, D3D12_RESOURCE_STATES& st, DXGI_FORMAT f, uint32_t w,
+                                    uint32_t h, uint32_t view) {
+    if (r) CurrentFrame().garbage.push_back(r);
+    r.Reset();
+    D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC td = Texture2DDesc(f, w, h);
+    td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    st = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    if (FAILED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &td, st, nullptr, IID_PPV_ARGS(&r)))) {
+        return false;
+    }
+    dev_->CreateRenderTargetView(r.Get(), nullptr, PostRtv(view));
+    return true;
+}
+
+// edges, blend weights, then the blend of t into smaa_[2], each left readable
+void D3D12Backend::DrawSmaaPasses(Target& t) {
+    const float clear[4] = {};
+    const float p[8] = {1.0f / t.w, 1.0f / t.h, float(t.w), float(t.h)};
+    ID3D12Resource* reads[kSmaaTargets][3] = {
+        {t.res.Get(), nullptr, nullptr},
+        {smaa_[0].Get(), smaa_lut_[0].Get(), smaa_lut_[1].Get()},
+        {t.res.Get(), smaa_[1].Get(), nullptr},
+    };
+    const DXGI_FORMAT fmts[kSmaaTargets][3] = {
+        {t.fmt, t.fmt, t.fmt},
+        {kSmaaEdgeFormat, DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8_UNORM},
+        {t.fmt, kSmaaWeightFormat, t.fmt},
+    };
+    const DXGI_FORMAT out[kSmaaTargets] = {kSmaaEdgeFormat, kSmaaWeightFormat, t.fmt};
+    for (int i = 0; i < int(kSmaaTargets); i++) {
+        D3D12_CPU_DESCRIPTOR_HANDLE rh = PostRtv(kSmaaRtv + i);
+        Transition(smaa_[i].Get(), smaa_state_[i], D3D12_RESOURCE_STATE_RENDER_TARGET);
+        // edges and weights discard where there is nothing, so they start clear
+        if (i < 2) cl_->ClearRenderTargetView(rh, clear, 0, nullptr);
+        Pass(SmaaSource(i), kSmaaEntries[i], out[i], rh, t.w, t.h, reads[i], fmts[i], p, -1);
+        Transition(smaa_[i].Get(), smaa_state_[i], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    }
+}
+
+void D3D12Backend::BlitFrame(ID3D12Resource* src, DXGI_FORMAT fmt) {
     // 16:9 when the console reports a widescreen display, else 4:3
     bool wide = app::Widescreen();
     float aspect = wide ? 16.0f / 9.0f : 4.0f / 3.0f;
@@ -3203,10 +3422,9 @@ void D3D12Backend::BlitFrame(Target& t) {
     cl_->RSSetViewports(1, &vp);
     cl_->RSSetScissorRects(1, &scissor);
     binds_ = {};
-    Transition(t.res.Get(), t.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     uint32_t mode = std::min(app::Rdr().colour_blind, 3u);
     std::array<float, 9> colour = mode ? ColourBlindMatrix(mode) : std::array<float, 9>{};
-    Blit(t.res.Get(), t.fmt, uv, {.gamma = gamma_, .colour = mode ? colour.data() : nullptr});
+    Blit(src, fmt, uv, {.gamma = gamma_, .colour = mode ? colour.data() : nullptr});
 }
 
 void D3D12Backend::RenderUi() {
@@ -3222,6 +3440,7 @@ void D3D12Backend::RenderUi() {
 }
 
 void D3D12Backend::DrawFrame(Target* t, uint32_t bi) {
+    ID3D12Resource* shown = t ? ShownFrame(*t) : nullptr;
     D3D12_RESOURCE_STATES bs = D3D12_RESOURCE_STATE_PRESENT;
     Transition(bb_[bi].Get(), bs, D3D12_RESOURCE_STATE_RENDER_TARGET);
     D3D12_CPU_DESCRIPTOR_HANDLE rh = Cpu(rtv_heap_.Get(), kRtvCount + bi, rtv_inc_);
@@ -3229,7 +3448,7 @@ void D3D12Backend::DrawFrame(Target* t, uint32_t bi) {
     cl_->ClearRenderTargetView(rh, black, 0, nullptr);
     cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
     bound_rt_ = bound_ds_ = nullptr;
-    if (t) BlitFrame(*t);
+    if (shown) BlitFrame(shown, t->fmt);
     RenderUi();
     Transition(bb_[bi].Get(), bs, D3D12_RESOURCE_STATE_PRESENT);
 }

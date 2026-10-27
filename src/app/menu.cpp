@@ -57,6 +57,7 @@ enum class RowId {
     FpsCounter,
     ColourBlind,
     Aniso,
+    Smaa,
     PauseOnFocusLoss,
     TextureReplacement,
     TextureDumping,
@@ -97,6 +98,7 @@ constexpr Row kSettingsRows[] = {
     {RowId::FpsCounter, "FPS COUNTER"},
     {RowId::ColourBlind, "COLOUR BLIND MODE"},
     {RowId::Heading, "GRAPHICS"},
+    {RowId::Smaa, "SMAA"},
     {RowId::Aniso, "ANISOTROPIC FILTERING"},
     {RowId::Heading, "GENERAL"},
     {RowId::PauseOnFocusLoss, "PAUSE ON FOCUS LOSS"},
@@ -326,6 +328,7 @@ bool* ToggleFlag(Settings& s, RowId id) {
     switch (id) {
         case RowId::Vsync: return &s.vsync;
         case RowId::FpsCounter: return &r.fps_counter;
+        case RowId::Smaa: return &r.smaa;
         case RowId::PauseOnFocusLoss: return &r.pause_on_focus_loss;
         case RowId::TextureReplacement: return &s.custom_textures;
         case RowId::TextureDumping: return &s.dump_textures;
@@ -494,6 +497,7 @@ void RestoreDefaults(int page) {
     r.monitor = fresh.monitor;
     r.fps_counter = fresh.fps_counter;
     r.colour_blind = fresh.colour_blind;
+    r.smaa = fresh.smaa;
     r.pause_on_focus_loss = fresh.pause_on_focus_loss;
     g_display_held = false;
     ShowOnMonitor();
