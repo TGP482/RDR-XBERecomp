@@ -1,5 +1,7 @@
 # Red Dead Revolver - XBE Recomp
-An unofficial native PC port of the original Xbox version of Red Dead Revolver via static recompilation, built into a 64 bit Windows executable. The game's x86 code is translated to C++ ahead of time, the Xbox kernel, Direct3D and DirectSound calls are implemented on Windows, and everything is drawn with Direct3D 12 and played through XAudio2. Made with the [Xbox XBE Recomp](https://github.com/TGP482/XboxXBE-Recomp) tool.
+An unofficial native PC port of the original Xbox version of Red Dead Revolver, with extended graphics options, keyboard and mouse support, and other enhancements.
+
+This port was created using the [Xbox XBE Recomp](https://github.com/TGP482/XboxXBE-Recomp) tool.
 
 > [!NOTE]
 > This project does not include any game assets. You must provide the files from your own legally acquired copy of the game to install or build.
@@ -7,31 +9,48 @@ An unofficial native PC port of the original Xbox version of Red Dead Revolver v
 ## Installation
 The latest version of [RDR-XBERecomp](https://github.com/TGP482/RDR-XBERecomp/releases) can be found in the Releases page.
 
-- Place your game files in the `assets` folder. This can be an ISO, or the extracted data files.
+- Put your game files in the `assets` folder. This can be an ISO, or the extracted data files.
 - Run `RDR.exe`. The first start compiles the game's code for your PC, this only happens once.
-- Recomp Settings can be adjusted in `settings.toml` beside the exe.
+- Recomp settings can be adjusted through the Settings overlay, which is opened with F10 by default.
 
 ## Features
 ### Display
+- **Monitor** - Choose which monitor the game is displayed on.
 - **Display Mode** - Switch between Fullscreen, Borderless and Windowed.
-- **Resolution** - Lists every mode your monitor reports and defaults to your desktop resolution, replacing the original resolution.
+- **Resolution** - Lists every mode your monitor reports and defaults to your desktop resolution, replacing the original 640x480 resolution.
 - **Render Resolution** - Renders the game at 20% to 200% of the output resolution, allowing supersampling or downscaling independent of the window size.
 - **Max Frame Rate** - Caps the frame rate to your monitor's refresh rate or a custom value, or removes the cap entirely.
 - **V-Sync** - Reduces screen tearing.
+- **HDR Output** - Displays the game in HDR10 on monitors with Windows HDR turned on, keeping white at your Windows SDR content brightness.
+- **FPS Counter** - Displays the frame rate on screen.
+- **Colour Blind Mode** - Adjusts the colours for protanopia, deuteranopia or tritanopia.
 
 ### Graphics
+- **Subpixel Morphological Antialiasing (SMAA)** - Enables SMAA to smooth jagged edges across the whole frame with a softer image. SMAA also smooths alpha-tested edges such as fences and foliage.
 - **Anisotropic Filtering** - Forces the selected anisotropic filtering level on all textures.
 
 ### Textures
-- **Texture Replacement** - Replaces the game's textures with the `.dds` or `.png` images in the `textures\replacement` folder beside the exe.
-- **Texture Dumping** - Saves every texture the game uses into the `textures\dumps` folder beside the exe as you play.
+- **Texture Replacement** - Replaces the game's textures with the .dds or .png images in the textures\replacement folder beside the exe.
+- **Texture Dumping** - Saves every texture the game uses into the textures\dumps folder beside the exe.
 - **Dump Format** - Choose between PNG or DDS, which keeps the original compression and mipmaps.
 
-### Input
-- **Controller** - Controller with SDL3 support for Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
+### Mouse and Keyboard
+Full keyboard and mouse support with raw input, adjustable sensitivity, inverted look and rebindable controls.
+
+### Controller
+Controller support through SDL3 for Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
+- **Aim Sensitivity** - Adjusts the horizontal and vertical aim sensitivity beyond the in-game sliders.
+- **Gyro Aiming** - Enables gyro aiming on controllers with a gyroscope.
+
+### General
+- **Skip Intro** - Skips the intro logos.
+- **Pause On Focus Loss** - Pauses the game and its sound while the window is in the background.
+- **Audio Output** - Choose between Automatic, Mono, 2.0 Stereo and 5.1 Surround.
+- **Toggle HUD** - Hides the HUD with a bindable key.
 
 ### Miscellaneous
 - **Boot Splash** - Place a `splash.png` (or `.bmp`) beside the exe to display a splash screen at launch.
+- **Custom Menu Cursor** - Place a `cursor.png` (or `cursor.dds`) beside the exe to replace the Windows arrow in the game's menus.
 
 ## System Requirements
 ### Minimum
