@@ -604,6 +604,8 @@ void OnRawInput(void* handle) {
 
 bool CursorShown() { return g_blocked || !InPlay() || GetForegroundWindow() != g_hwnd; }
 
+Screen GetScreen() { return Screen(g_screen.load()); }
+
 void SetScreen(Screen screen) {
     if (g_screen.exchange(int(screen)) == int(screen)) return;
     if (screen != Screen::Play) ClipCursor(nullptr);

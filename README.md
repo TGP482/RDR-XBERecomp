@@ -19,6 +19,7 @@ The latest version of [RDR-XBERecomp](https://github.com/TGP482/RDR-XBERecomp/re
 - **Display Mode** - Switch between Fullscreen, Borderless and Windowed.
 - **Resolution** - Lists every mode your monitor reports and defaults to your desktop resolution, replacing the original 640x480 resolution.
 - **Render Resolution** - Renders the game at 20% to 200% of the output resolution, allowing supersampling or downscaling independent of the window size.
+- **Field of View** - Sets the horizontal field of view during gameplay from 45 to 140 degrees.
 - **Max Frame Rate** - Caps the frame rate to your monitor's refresh rate or a custom value, or removes the cap entirely.
 - **V-Sync** - Reduces screen tearing.
 - **HDR Output** - Displays the game in HDR10 on monitors with Windows HDR turned on, keeping white at your Windows SDR content brightness.

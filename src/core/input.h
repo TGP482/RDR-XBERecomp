@@ -31,6 +31,7 @@ bool CursorShown();
 // as the pad's D-pad, A and B; the pause key backs out as B in a menu, the pause menu and cutscenes keep it on Start.
 enum class Screen { Play, Menu, Pause, Cutscene };
 void SetScreen(Screen screen);
+Screen GetScreen();
 // aiming a weapon: the aim sensitivities apply
 void SetAiming(bool on);
 bool Aiming();

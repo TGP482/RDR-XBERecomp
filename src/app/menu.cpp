@@ -58,6 +58,7 @@ enum class RowId {
     DisplayMode,
     Resolution,
     RenderResolution,
+    Fov,
     Vsync,
     HdrOutput,
     MaxFps,
@@ -108,6 +109,7 @@ constexpr Row kSettingsRows[] = {
     {RowId::DisplayMode, "DISPLAY MODE"},
     {RowId::Resolution, "RESOLUTION"},
     {RowId::RenderResolution, "RENDER RESOLUTION"},
+    {RowId::Fov, "FIELD OF VIEW"},
     {RowId::Vsync, "VERTICAL SYNC"},
     {RowId::HdrOutput, "HDR OUTPUT"},
     {RowId::MaxFps, "MAX FRAME RATE"},
@@ -419,6 +421,7 @@ void Step(RowId id, int step, Settings& s) {
         case RowId::DumpFormat: s.texture_dump_format = uint32_t(Wrap(int(s.texture_dump_format), step, 2)); break;
         case RowId::ColourBlind: StepName(Rdr().colour_blind, kColourBlindNames, step); break;
         case RowId::Contrast: Rdr().contrast = uint32_t(StepRange(int(Rdr().contrast), 0, 100, 1, step)); break;
+        case RowId::Fov: Rdr().fov = uint32_t(StepRange(int(Rdr().fov), 45, 140, 1, step)); break;
         case RowId::AudioOutput:
             StepTable(kAudioOutputs, Rdr().audio_output, step);
             audio::SetOutputMode(Rdr().audio_output);
@@ -485,6 +488,10 @@ std::string Text(RowId id, Settings& s) {
         case RowId::Msaa: return kMsaaNames[NearestIndex(kMsaaValues, Rdr().msaa)];
         case RowId::DumpFormat: return kDumpFormatNames[std::min(s.texture_dump_format, 1u)];
         case RowId::ColourBlind: return NameText(Rdr().colour_blind, kColourBlindNames);
+        case RowId::Fov: {
+            uint32_t v = Rdr().fov;
+            return std::to_string(v) + (v == kGameFov ? " (DEFAULT)" : "");
+        }
         case RowId::Contrast: {
             uint32_t v = Rdr().contrast;
             return std::to_string(v) + (v == 50 ? " (DEFAULT)" : "");
@@ -572,6 +579,7 @@ void RestoreDefaults(int page) {
     Get().join_ip = join_ip;
     r.monitor = fresh.monitor;
     r.fps_counter = fresh.fps_counter;
+    r.fov = fresh.fov;
     r.colour_blind = fresh.colour_blind;
     r.contrast = fresh.contrast;
     r.hdr_output = fresh.hdr_output;
