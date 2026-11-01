@@ -25,6 +25,7 @@
 #include "app/display.h"
 #include "core/diag.h"
 #include "d3d/inline_shift.h"
+#include "d3d/occlusion.h"
 #include "gpu/backend.h"
 #include "gpu/shaders.h"
 #include "gpu/texture.h"
@@ -1696,6 +1697,33 @@ xdk::ScreenSpan xdk::EndInlineSide() {
     xdk::ScreenSpan span = g_inline.span;
     g_inline = {};
     return span;
+}
+
+// linear distance fog of the latest draw, as Occlusion fades with it: amount * saturate(slope * view z + offset)
+struct FogFade {
+    float slope = 0;
+    float offset = 0;
+    float amount = 0;
+};
+
+static FogFade DistanceFog() {
+    float start = std::bit_cast<float>(g_state.rs[gpu::kRsFogStart]);
+    float end = std::bit_cast<float>(g_state.rs[gpu::kRsFogEnd]);
+    if (!g_state.rs[gpu::kRsFogEnable] || end <= start) return {};
+    float slope = 1 / (end - start);
+    return {slope, -start * slope, 1};
+}
+
+void xdk::Occlusion(bool gtao) {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    const float* m = g_state.transforms[kTsProjection].data();
+    bool perspective = std::abs(m[11]) == 1 && m[15] == 0 && m[0] != 0 && m[5] != 0;
+    if (!g_backend || !perspective) return;
+    float hand = m[11];  // 1 left handed, -1 right handed as RDR's
+    FogFade fog = DistanceFog();
+    float p[kOcclusionParams] = {1 / m[0],  1 / m[5],   m[8] * hand, m[9] * hand,        m[14], m[10] * hand,
+                                 fog.slope, fog.offset, fog.amount,  gtao ? 1.0f : 0.0f};
+    g_backend->Clear(g_state, kOcclusionParams / 4, reinterpret_cast<const uint8_t*>(p), kClearOcclusion, 0, 0, 0);
 }
 
 void xdk::BeginInlineKeep() { g_keep++; }

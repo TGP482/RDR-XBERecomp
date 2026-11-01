@@ -37,6 +37,7 @@ constexpr uint32_t kAnisoValues[] = {0, 2, 4, 8, 16};
 const char* const kAnisoNames[] = {"OFF", "2x", "4x", "8x", "16x"};
 constexpr uint32_t kMsaaValues[] = {0, 2, 4, 8};
 const char* const kMsaaNames[] = {"OFF", "2x", "4x", "8x"};
+const char* const kAoNames[] = {"OFF", "SSAO", "GTAO"};
 constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, kFpsCapRefresh, 0};
 // in DisplayMode order
 const char* const kDisplayModeNames[] = {"FULLSCREEN", "BORDERLESS", "WINDOWED"};
@@ -68,6 +69,7 @@ enum class RowId {
     ColourBlind,
     Contrast,
     Aniso,
+    AmbientOcclusion,
     Msaa,
     Smaa,
     ScreenBlur,
@@ -120,6 +122,7 @@ constexpr Row kSettingsRows[] = {
     {RowId::ColourBlind, "COLOUR BLIND MODE"},
     {RowId::Contrast, "CONTRAST"},
     {RowId::Heading, "GRAPHICS"},
+    {RowId::AmbientOcclusion, "AMBIENT OCCLUSION"},
     {RowId::Msaa, "MSAA"},
     {RowId::Smaa, "SMAA"},
     {RowId::Aniso, "ANISOTROPIC FILTERING"},
@@ -420,6 +423,7 @@ void Step(RowId id, int step, Settings& s) {
         case RowId::RenderResolution: s.render_percent = StepRenderPercent(s.render_percent, step); break;
         case RowId::MaxFps: StepTable(kFpsCaps, s.fps_cap, step); break;
         case RowId::Aniso: StepTable(kAnisoValues, s.aniso, step); break;
+        case RowId::AmbientOcclusion: StepName(Rdr().ambient_occlusion, kAoNames, step); break;
         case RowId::Msaa: StepTable(kMsaaValues, Rdr().msaa, step); break;
         case RowId::DumpFormat: s.texture_dump_format = uint32_t(Wrap(int(s.texture_dump_format), step, 2)); break;
         case RowId::FmvScale: StepName(Rdr().fmv_scale, kFmvScaleNames, step); break;
@@ -489,6 +493,7 @@ std::string Text(RowId id, Settings& s) {
         case RowId::RenderResolution: return RenderText(s);
         case RowId::MaxFps: return FpsCapText(kFpsCaps[NearestIndex(kFpsCaps, s.fps_cap)]);
         case RowId::Aniso: return kAnisoNames[NearestIndex(kAnisoValues, s.aniso)];
+        case RowId::AmbientOcclusion: return NameText(Rdr().ambient_occlusion, kAoNames);
         case RowId::Msaa: return kMsaaNames[NearestIndex(kMsaaValues, Rdr().msaa)];
         case RowId::DumpFormat: return kDumpFormatNames[std::min(s.texture_dump_format, 1u)];
         case RowId::FmvScale: return NameText(Rdr().fmv_scale, kFmvScaleNames);
@@ -589,6 +594,7 @@ void RestoreDefaults(int page) {
     r.colour_blind = fresh.colour_blind;
     r.contrast = fresh.contrast;
     r.hdr_output = fresh.hdr_output;
+    r.ambient_occlusion = fresh.ambient_occlusion;
     r.msaa = fresh.msaa;
     r.smaa = fresh.smaa;
     r.screen_blur = fresh.screen_blur;

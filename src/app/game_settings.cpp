@@ -71,6 +71,7 @@ void LoadRdr(const void* table) {
     s.colour_blind = std::min(t["colour_blind"].value_or(s.colour_blind), 3u);
     s.contrast = std::min(t["contrast"].value_or(s.contrast), 100u);
     s.hdr_output = t["hdr_output"].value_or(s.hdr_output);
+    s.ambient_occlusion = std::min(t["ambient_occlusion"].value_or(s.ambient_occlusion), 2u);
     s.msaa = std::min(t["msaa"].value_or(s.msaa), 8u);
     s.smaa = t["smaa"].value_or(s.smaa);
     s.screen_blur = t["screen_blur"].value_or(s.screen_blur);
@@ -111,6 +112,7 @@ void SaveRdr(void* table) {
     t.insert("colour_blind", int64_t(s.colour_blind));
     t.insert("contrast", int64_t(s.contrast));
     t.insert("hdr_output", s.hdr_output);
+    t.insert("ambient_occlusion", int64_t(s.ambient_occlusion));
     t.insert("msaa", int64_t(s.msaa));
     t.insert("smaa", s.smaa);
     t.insert("screen_blur", s.screen_blur);

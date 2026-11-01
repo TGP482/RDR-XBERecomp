@@ -19,6 +19,7 @@ struct RdrSettings {
     uint32_t colour_blind = 0;  // 0 off, 1 protanopia, 2 deuteranopia, 3 tritanopia
     uint32_t contrast = 50;     // 0 to 100, 50 leaves the picture alone
     bool hdr_output = true;  // HDR10 on a display with Windows HDR on
+    uint32_t ambient_occlusion = 0;  // 0 off, 1 SSAO, 2 GTAO
     uint32_t msaa = 0;  // samples a pixel of the scene, 0 off
     bool smaa = false;
     bool screen_blur = true;  // the game's screen blur in play
