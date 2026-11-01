@@ -9,7 +9,12 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <bit>
+#include <cmath>
+#include <cstring>
+#include <limits>
 #include <chrono>
 #include <map>
 #include <thread>
@@ -19,6 +24,7 @@
 #include "app/app.h"
 #include "app/display.h"
 #include "core/diag.h"
+#include "d3d/inline_shift.h"
 #include "gpu/backend.h"
 #include "gpu/shaders.h"
 #include "gpu/texture.h"
@@ -1172,23 +1178,6 @@ HLE_STDCALL(D3DDevice_SetPixelShaderConstant, 3) {
 
 // drawing
 
-HLE_STDCALL(D3DDevice_DrawVertices, 3) {
-    std::lock_guard<std::recursive_mutex> lock(g_lock);
-    Walk(Dev(kDevPush));  // a visibility test begun since the last draw counts this one
-    SyncDeferred();
-    if (g_backend) g_backend->Draw(g_state, a[0], a[1], a[2], nullptr);
-    return 0;
-}
-
-HLE_STDCALL(D3DDevice_DrawIndexedVertices, 3) {
-    std::lock_guard<std::recursive_mutex> lock(g_lock);
-    Walk(Dev(kDevPush));
-    SyncDeferred();
-    const uint8_t* indices = a[2] ? static_cast<const uint8_t*>(HostPtr(a[2])) : nullptr;
-    if (g_backend) g_backend->Draw(g_state, a[0], 0, a[1], indices);
-    return 0;
-}
-
 // DrawVerticesUP(prim, count, vertices, stride): the vertices are copied to a ring the render thread reads, stream 0
 // points there through a vertex buffer header for the draw. A half of the ring is written again once the draws
 // that read it are done.
@@ -1399,13 +1388,273 @@ HLE_STDCALL(D3DDevice_BeginPush, 1) {
     return g_push_begin;
 }
 
+// D3DTRANSFORMSTATETYPE indices into g_state.transforms
+constexpr size_t kTsView = 2;
+constexpr size_t kTsProjection = 3;
+constexpr size_t kTsWorld = 256;
+// RDR's models run a vertex shader fed their transposed world view projection at c4 to c7 (sub_00183C20), as
+// hardware order registers (D3D register + 96)
+constexpr size_t kModelClipX = 100;
+constexpr size_t kModelClipW = 103;
+
+// Widescreen: the game lays its 2D out for 4:3 in screen pixels and the output stretches it. That 2D is narrowed back
+// to 4:3 in the middle of the screen, or against the side of the HUD element drawing (game/hud_widescreen.cpp). In
+// the front end only the draws hooked there narrow. Kept draws (the lock reticle, the book) and draws as wide as the
+// screen stay as they are.
+constexpr uint32_t kScreenWidth = 0x413C44;  // the game's screen size in pixels
+constexpr uint32_t kScreenHeight = 0x413C48;
+// state machine: the current state, its +4 name
+constexpr uint32_t kCurrentState = 0x6664AC;
+constexpr uint32_t kStateName = 0x4;
+constexpr float kNarrow = 0.75f;             // 4:3 over 16:9
+constexpr float kFullWidth = 0.98f;          // a draw reaching this far to both sides is full screen
+
+// the HUD element drawing, and the span it drew
+struct InlineSide {
+    bool drawing = false;
+    int side = 0;
+    xdk::Fit fit = xdk::Fit::Narrow;
+    xdk::ScreenSpan span;
+};
+InlineSide g_inline;
+int g_keep = 0;  // kept draws running
+
+// row vectors: a * b
+static void MatMul(const float* a, const float* b, float* out) {
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) {
+            out[r * 4 + c] = a[r * 4] * b[c] + a[r * 4 + 1] * b[4 + c] + a[r * 4 + 2] * b[8 + c] + a[r * 4 + 3] * b[12 + c];
+        }
+    }
+}
+
+// m is world view projection of the fixed function transforms, when orthographic; not for screen space vertices
+static bool FixedOrtho(float* m) {
+    bool pretransformed = (g_state.vs_handle & 0xE) == 4;
+    if ((g_state.vs_handle & 1) || pretransformed) return false;
+    float wv[16];
+    MatMul(g_state.transforms[kTsWorld].data(), g_state.transforms[kTsView].data(), wv);
+    MatMul(wv, g_state.transforms[kTsProjection].data(), m);
+    return m[3] == 0 && m[7] == 0 && m[11] == 0 && m[15] == 1;
+}
+
+// an orthographic fixed function transform, x only from x
+static bool PixelOrtho(float* m) {
+    return FixedOrtho(m) && m[4] == 0 && m[8] == 0;
+}
+
+static bool InFrontEnd() {
+    uint32_t state = R32(kCurrentState);
+    uint32_t name = state ? R32(state + kStateName) : 0;
+    return name && std::strcmp(static_cast<const char*>(HostPtr(name)), "FrontEnd") == 0;
+}
+
+static bool OnScreen() {
+    if (!app::Widescreen() || g_keep > 0) return false;
+    if (InFrontEnd() && !g_inline.drawing) return false;
+    uint32_t w;
+    uint32_t h;
+    gpu::SurfaceSize(g_state.rt, w, h);
+    return w == R32(kScreenWidth) && h == R32(kScreenHeight);
+}
+
+// clip space x = position x * scale + offset
+struct ClipX {
+    float scale;
+    float offset;
+};
+
+// 2D in the screen's pixels, unplaced: screen space vertices, or the pixel orthographic transform
+static bool InlineClipX(ClipX& cx) {
+    float pixel = 2.0f / float(R32(kScreenWidth));
+    bool pretransformed = !(g_state.vs_handle & 1) && (g_state.vs_handle & 0xE) == 4;
+    if (pretransformed) {
+        cx = {pixel, -1};
+        return true;
+    }
+    float m[16];
+    if (!PixelOrtho(m)) return false;
+    cx = {m[0], m[12]};
+    bool unplaced = std::abs(m[12] + 1) < 1e-3f;
+    return unplaced && std::abs(m[0] - pixel) < pixel * 1e-3f;
+}
+
+// x scale of the draw's fit, the move to its side comes on top
+static float Scale() {
+    return g_inline.fit == xdk::Fit::Shift ? 1.0f : kNarrow;
+}
+
+// clip space x the element drawing reached
+static void AddToSpan(float x0, float x1) {
+    xdk::ScreenSpan& span = g_inline.span;
+    span.x0 = span.drawn ? std::min(span.x0, x0) : x0;
+    span.x1 = span.drawn ? std::max(span.x1, x1) : x1;
+    span.drawn = true;
+}
+
+static bool FullWidth(float x0, float x1) {
+    return x0 <= -kFullWidth && x1 >= kFullWidth;
+}
+
+// to 4:3 in the middle of the screen, or against the side of the HUD element drawing; false when left as it is
+static bool NarrowInline(std::vector<uint32_t>& vertices) {
+    uint32_t stride = VertexBytes() / 4;
+    ClipX cx;
+    if (!stride || !OnScreen() || !InlineClipX(cx)) return false;
+    float x0 = std::numeric_limits<float>::max();
+    float x1 = std::numeric_limits<float>::lowest();
+    for (size_t i = 0; i + stride <= vertices.size(); i += stride) {
+        float clip = std::bit_cast<float>(vertices[i]) * cx.scale + cx.offset;
+        x0 = std::min(x0, clip);
+        x1 = std::max(x1, clip);
+    }
+    AddToSpan(x0, x1);
+    if (FullWidth(x0, x1) && g_inline.fit != xdk::Fit::Whole) return false;
+    float move = float(g_inline.side) * (1 - kNarrow);
+    for (size_t i = 0; i + stride <= vertices.size(); i += stride) {
+        float clip = std::bit_cast<float>(vertices[i]) * cx.scale + cx.offset;
+        float narrowed = clip * Scale() + move;
+        vertices[i] = std::bit_cast<uint32_t>((narrowed - cx.offset) / cx.scale);
+    }
+    return true;
+}
+
+// A narrowed draw is clipped to its 4:3 part of the screen, so what the game left off screen (the shop's next pages)
+// stays off it; the title's own scissor narrows with it.
+static void ClipNarrowed() {
+    if (g_inline.fit == xdk::Fit::Shift) return;
+    float w = float(R32(kScreenWidth));
+    float spare = w * (1 - kNarrow);
+    float left = spare * (float(g_inline.side) + 1) / 2;
+    uint32_t x0 = uint32_t(left);
+    uint32_t y0 = 0;
+    uint32_t x1 = uint32_t(left + w * kNarrow);
+    uint32_t y1 = R32(kScreenHeight);
+    if (g_state.scissor_count) {
+        x0 = std::max(x0, uint32_t(left + float(g_state.scissors[0]) * kNarrow));
+        y0 = g_state.scissors[1];
+        x1 = std::min(x1, uint32_t(left + float(g_state.scissors[2]) * kNarrow));
+        y1 = g_state.scissors[3];
+    }
+    g_state.scissor_count = 1;
+    g_state.scissors[0] = x0;
+    g_state.scissors[1] = y0;
+    g_state.scissors[2] = x1;
+    g_state.scissors[3] = y1;
+}
+
+// the scissor, projection and model clip x row a narrowed draw changes, put back after it
+struct NarrowedState {
+    uint32_t scissor_count;
+    std::array<uint32_t, 4> scissor;
+    std::array<float, 16> projection;
+    std::array<float, 4> model_clip_x;
+};
+
+static NarrowedState SaveNarrowed() {
+    NarrowedState saved{g_state.scissor_count, {}, g_state.transforms[kTsProjection], {}};
+    std::copy_n(g_state.scissors.begin(), 4, saved.scissor.begin());
+    std::copy_n(g_state.vsc[kModelClipX].begin(), 4, saved.model_clip_x.begin());
+    return saved;
+}
+
+static void RestoreNarrowed(const NarrowedState& saved) {
+    g_state.scissor_count = saved.scissor_count;
+    std::copy_n(saved.scissor.begin(), 4, g_state.scissors.begin());
+    g_state.transforms[kTsProjection] = saved.projection;
+    std::copy_n(saved.model_clip_x.begin(), 4, g_state.vsc[kModelClipX].begin());
+}
+
+// through the projection: clip x becomes x * Scale() + the element's move
+static void NarrowProjection() {
+    float move = float(g_inline.side) * (1 - kNarrow);
+    float* proj = g_state.transforms[kTsProjection].data();
+    for (int r = 0; r < 4; r++) proj[r * 4] = proj[r * 4] * Scale() + proj[r * 4 + 3] * move;
+    ClipNarrowed();
+}
+
+// through the model's clip x row: clip x becomes x * Scale() + the element's move * w
+static void NarrowShaderModel() {
+    auto& x = g_state.vsc[kModelClipX];
+    const auto& w = g_state.vsc[kModelClipW];
+    if (w[3] == 0) return;
+    float origin = x[3] / w[3];
+    AddToSpan(origin, origin);
+    float move = float(g_inline.side) * (1 - kNarrow);
+    for (int i = 0; i < 4; i++) x[i] = x[i] * Scale() + w[i] * move;
+    ClipNarrowed();
+}
+
+// A 2D model a hooked draw makes from vertex buffers (the ammo's bullets) narrows through its transform. Its origin
+// counts towards the element's span.
+static void NarrowElementModel() {
+    if (!g_inline.drawing || !OnScreen()) return;
+    if (g_state.vs_handle & 1) {
+        NarrowShaderModel();
+        return;
+    }
+    float m[16];
+    if (!FixedOrtho(m)) return;
+    AddToSpan(m[12], m[12]);
+    NarrowProjection();
+}
+
+// 2D a hooked draw places through its own transform (Flash bitmaps) narrows through the projection too, unless it is
+// as wide as the screen; vertices start with their position
+static bool NarrowPlacedInline(const std::vector<uint32_t>& vertices) {
+    uint32_t stride = VertexBytes() / 4;
+    float m[16];
+    if (stride < 3 || !g_inline.drawing || !OnScreen() || !FixedOrtho(m)) return false;
+    float x0 = std::numeric_limits<float>::max();
+    float x1 = std::numeric_limits<float>::lowest();
+    for (size_t i = 0; i + stride <= vertices.size(); i += stride) {
+        float x = std::bit_cast<float>(vertices[i]);
+        float y = std::bit_cast<float>(vertices[i + 1]);
+        float z = std::bit_cast<float>(vertices[i + 2]);
+        float clip = x * m[0] + y * m[4] + z * m[8] + m[12];
+        x0 = std::min(x0, clip);
+        x1 = std::max(x1, clip);
+    }
+    AddToSpan(x0, x1);
+    if (FullWidth(x0, x1)) return false;
+    NarrowProjection();
+    return true;
+}
+
+HLE_STDCALL(D3DDevice_DrawVertices, 3) {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    Walk(Dev(kDevPush));  // a visibility test begun since the last draw counts this one
+    SyncDeferred();
+    NarrowedState saved = SaveNarrowed();
+    NarrowElementModel();
+    if (g_backend) g_backend->Draw(g_state, a[0], a[1], a[2], nullptr);
+    RestoreNarrowed(saved);
+    return 0;
+}
+
+HLE_STDCALL(D3DDevice_DrawIndexedVertices, 3) {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    Walk(Dev(kDevPush));
+    SyncDeferred();
+    const uint8_t* indices = a[2] ? static_cast<const uint8_t*>(HostPtr(a[2])) : nullptr;
+    NarrowedState saved = SaveNarrowed();
+    NarrowElementModel();
+    if (g_backend) g_backend->Draw(g_state, a[0], 0, a[1], indices);
+    RestoreNarrowed(saved);
+    return 0;
+}
+
 // a primitive whose vertices came as an inline array, in the bound vertex format
-static void DrawInline(uint32_t prim, const std::vector<uint32_t>& vertices) {
+static void DrawInline(uint32_t prim, std::vector<uint32_t>& vertices) {
     if (vertices.empty()) return;
+    NarrowedState saved = SaveNarrowed();
+    if (NarrowInline(vertices)) ClipNarrowed();
+    else NarrowPlacedInline(vertices);
     uint32_t stride = VertexBytes();
     uint32_t bytes = uint32_t(vertices.size()) * 4;
     if (stride && bytes % stride == 0) DrawUp(prim, bytes / stride, vertices.data(), stride);
     else LOG_FIRST(8, "d3d: EndPush primitive %u dropped, %u bytes of vertices of %u", prim, bytes, stride);
+    RestoreNarrowed(saved);
 }
 
 static void RunCommands(uint32_t begin, uint32_t end) {
@@ -1440,6 +1689,17 @@ static void RunCommands(uint32_t begin, uint32_t end) {
         }
     }
 }
+
+void xdk::BeginInlineSide(int side, xdk::Fit fit) { g_inline = {true, side, fit, {}}; }
+
+xdk::ScreenSpan xdk::EndInlineSide() {
+    xdk::ScreenSpan span = g_inline.span;
+    g_inline = {};
+    return span;
+}
+
+void xdk::BeginInlineKeep() { g_keep++; }
+void xdk::EndInlineKeep() { g_keep--; }
 
 HLE_STDCALL(D3DDevice_EndPush, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
