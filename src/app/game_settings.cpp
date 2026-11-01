@@ -66,6 +66,7 @@ void LoadRdr(const void* table) {
     RdrSettings& s = Rdr();
     s.monitor = t["monitor"].value_or(s.monitor);
     s.fps_counter = t["fps_counter"].value_or(s.fps_counter);
+    s.fmv_scale = std::min(t["fmv_scale"].value_or(s.fmv_scale), 1u);
     s.fov = std::clamp(t["fov"].value_or(s.fov), 45u, 140u);
     s.colour_blind = std::min(t["colour_blind"].value_or(s.colour_blind), 3u);
     s.contrast = std::min(t["contrast"].value_or(s.contrast), 100u);
@@ -106,6 +107,7 @@ void SaveRdr(void* table) {
     t.insert("monitor", s.monitor);
     t.insert("fps_counter", s.fps_counter);
     t.insert("fov", int64_t(s.fov));
+    t.insert("fmv_scale", int64_t(s.fmv_scale));
     t.insert("colour_blind", int64_t(s.colour_blind));
     t.insert("contrast", int64_t(s.contrast));
     t.insert("hdr_output", s.hdr_output);

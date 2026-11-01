@@ -1,7 +1,11 @@
 // Widescreen HUD: the game's 4:3 2D keeps its shape in the middle of the screen (d3d/d3d8.cpp), and each HUD element
 // goes to the side of the screen it sat on last frame, so the HUD keeps to the screen's edges. In the front end only the
 // button prompts and the Flash movies (title, shop, upgrades) narrow, in the middle; the legal screen's picture
-// narrows to 4:3 anywhere.
+// narrows to 4:3 anywhere. Full screen movies follow FMV SCALE.
+#include <cstring>
+
+#include "app/app.h"
+#include "app/game_settings.h"
 #include "d3d/inline_shift.h"
 #include "xdk/hle.h"
 
@@ -36,6 +40,75 @@ void EndElement(Element& e) {
     if (--g_depth > 0) return;
     xdk::ScreenSpan span = xdk::EndInlineSide();
     if (span.drawn) e.side = SideOf(span);
+}
+
+// movie: +0 its Bink (+0 width, +4 height), +4 its texture; the movie draw's return, in sub_00070F60, and that
+// draw's return in the Rockstar logo's loop (sub_00017940)
+constexpr uint32_t kMovieBink = 0x0;
+constexpr uint32_t kMovieTexture = 0x4;
+constexpr uint32_t kMovieDrawReturn = 0x70F74;
+constexpr uint32_t kLogoLoopReturn = 0x179FE;
+// stage 0's texture, cdecl(texture); a textured rect, cdecl(x0, y0, x1, y1, u0, v0, u1, v1, colour, 0, 0, 0) in
+// pixels; the screen's size
+constexpr uint32_t kSetTexture = 0x182AB0;
+constexpr uint32_t kDrawRect = 0x17D8B0;
+constexpr uint32_t kScreenWidth = 0x413C44;
+constexpr uint32_t kScreenHeight = 0x413C48;
+// a movie's frame is NTSC 4:3 whatever its pixels
+constexpr float kMovieAspect = 4.0f / 3.0f;
+constexpr float kWideAspect = 16.0f / 9.0f;
+
+// the screen black, so a 4:3 movie leaves no old frame at its sides; full width draws keep their place
+void DrawBlackScreen(X86Context& ctx) {
+    uint32_t x = R32(ctx.esp + 4);
+    uint32_t y = R32(ctx.esp + 8);
+    CallGuest(ctx, kSetTexture, {0});
+    CallGuest(ctx, kDrawRect, {x, y, x + R32(kScreenWidth), y + R32(kScreenHeight), 0, 0, 0, 0, 0xFF000000u, 0, 0, 0});
+}
+
+// black rows above and below a movie's picture, of its 480, measured: the cutscenes' unless listed
+struct MovieBars {
+    const char* name;
+    uint32_t rows;
+};
+constexpr MovieBars kMovieBars[] = {{"titles", 66}, {"attract", 91}, {"slide01", 0}};
+constexpr uint32_t kCutsceneBars = 20;
+constexpr uint32_t kMovieName = 0x666558;  // the playing movie's name
+
+uint32_t BarRows(uint32_t height) {
+    const char* name = static_cast<const char*>(HostPtr(kMovieName));
+    uint32_t rows = kCutsceneBars;
+    for (const MovieBars& m : kMovieBars) {
+        if (std::strstr(name, m.name)) rows = m.rows;
+    }
+    return rows * height / 480;
+}
+
+// The movie's 4:3 frame zoomed as far as its black bars allow: a picture wider than 16:9 fills the screen's width,
+// its rows cropped evenly; a narrower one fills its height between black pillars. Kept as placed.
+void DrawMovieFilled(X86Context& ctx) {
+    uint32_t movie = ctx.ecx;
+    uint32_t texture = R32(movie + kMovieTexture);
+    uint32_t bink = R32(movie + kMovieBink);
+    if (!texture || !bink) return;
+    uint32_t width = R32(bink);
+    uint32_t height = R32(bink + 4);
+    uint32_t crop = BarRows(height);
+    float picture = kMovieAspect * float(height) / float(height - 2 * crop);
+    float shown = 1.0f;  // share of the screen's width
+    if (picture >= kWideAspect) crop = uint32_t(float(height) * (1 - kMovieAspect / kWideAspect) / 2);
+    else shown = picture / kWideAspect;
+    float screen = float(R32(kScreenWidth));
+    uint32_t x = R32(ctx.esp + 4);
+    uint32_t y = R32(ctx.esp + 8);
+    uint32_t x0 = x + uint32_t(screen * (1 - shown) / 2);
+    uint32_t x1 = x + uint32_t(screen * (1 + shown) / 2);
+    xdk::BeginInlineKeep();
+    if (shown < 1.0f) DrawBlackScreen(ctx);
+    CallGuest(ctx, kSetTexture, {texture});
+    CallGuest(ctx, kDrawRect, {x0, y, x1, y + R32(kScreenHeight), 0, crop, width, height - crop, 0xFFFFFFFFu, 0, 0, 0});
+    CallGuest(ctx, kSetTexture, {0});
+    xdk::EndInlineKeep();
 }
 
 void BeginMiddle() {
@@ -121,6 +194,27 @@ X86_FUNC(sub_0005EB40) {
     xdk::BeginInlineSide(0, xdk::Fit::Whole);
     __imp__sub_0005EB40(ctx, base);
     xdk::EndInlineSide();
+}
+
+// A full screen movie's picture, thiscall(movie, x, y) ret 8, drawn by sub_00070F60. The game fills the 4:3 screen
+// with the movie's 4:3 frame, so a widescreen display stretches it. FMV SCALE's Fill zooms the frame as far as its
+// black bars allow instead; 4:3 narrows the game's picture to 4:3 as the legal screen's. The Rockstar logo stays 4:3.
+X86_EXTERN_FUNC(__imp__sub_001F86D0);
+X86_FUNC(sub_001F86D0) {
+    bool logo = R32(ctx.esp) == kMovieDrawReturn && R32(ctx.esp + 0xC) == kLogoLoopReturn;
+    if (!app::Widescreen()) {
+        __imp__sub_001F86D0(ctx, base);
+        return;
+    }
+    if (logo || app::Rdr().fmv_scale == 1) {
+        DrawBlackScreen(ctx);
+        xdk::BeginInlineSide(0, xdk::Fit::Whole);
+        __imp__sub_001F86D0(ctx, base);
+        xdk::EndInlineSide();
+        return;
+    }
+    DrawMovieFilled(ctx);
+    ctx.esp += 12;  // ret 8
 }
 
 // the tutorial's controller, thiscall(controller), vtable 0x3F5850 slot 6: the game keeps its shape on 16:9 but lays

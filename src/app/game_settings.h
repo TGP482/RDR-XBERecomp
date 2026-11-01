@@ -14,6 +14,7 @@ constexpr uint32_t kGameFov = 63;  // the game camera's own, horizontal degrees 
 struct RdrSettings {
     std::string monitor;  // its device name, \\.\DISPLAY2; empty the primary
     bool fps_counter = false;
+    uint32_t fmv_scale = 0;  // full screen movies on a wider screen: 0 fill it, 1 in a 4:3 frame
     uint32_t fov = kGameFov;  // in play
     uint32_t colour_blind = 0;  // 0 off, 1 protanopia, 2 deuteranopia, 3 tritanopia
     uint32_t contrast = 50;     // 0 to 100, 50 leaves the picture alone

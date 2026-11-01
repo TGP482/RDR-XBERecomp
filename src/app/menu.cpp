@@ -41,6 +41,7 @@ constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, kFpsCa
 // in DisplayMode order
 const char* const kDisplayModeNames[] = {"FULLSCREEN", "BORDERLESS", "WINDOWED"};
 const char* const kDumpFormatNames[] = {"PNG", "DDS"};
+const char* const kFmvScaleNames[] = {"FILL", "4:3"};
 const char* const kColourBlindNames[] = {"OFF", "PROTANOPIA", "DEUTERANOPIA", "TRITANOPIA"};
 constexpr uint32_t kAudioOutputs[] = {audio::kOutputAuto, audio::kOutputMono, audio::kOutputStereo,
                                       audio::kOutputSurround};
@@ -63,6 +64,7 @@ enum class RowId {
     HdrOutput,
     MaxFps,
     FpsCounter,
+    FmvScale,
     ColourBlind,
     Contrast,
     Aniso,
@@ -114,6 +116,7 @@ constexpr Row kSettingsRows[] = {
     {RowId::HdrOutput, "HDR OUTPUT"},
     {RowId::MaxFps, "MAX FRAME RATE"},
     {RowId::FpsCounter, "FPS COUNTER"},
+    {RowId::FmvScale, "FMV SCALE"},
     {RowId::ColourBlind, "COLOUR BLIND MODE"},
     {RowId::Contrast, "CONTRAST"},
     {RowId::Heading, "GRAPHICS"},
@@ -419,6 +422,7 @@ void Step(RowId id, int step, Settings& s) {
         case RowId::Aniso: StepTable(kAnisoValues, s.aniso, step); break;
         case RowId::Msaa: StepTable(kMsaaValues, Rdr().msaa, step); break;
         case RowId::DumpFormat: s.texture_dump_format = uint32_t(Wrap(int(s.texture_dump_format), step, 2)); break;
+        case RowId::FmvScale: StepName(Rdr().fmv_scale, kFmvScaleNames, step); break;
         case RowId::ColourBlind: StepName(Rdr().colour_blind, kColourBlindNames, step); break;
         case RowId::Contrast: Rdr().contrast = uint32_t(StepRange(int(Rdr().contrast), 0, 100, 1, step)); break;
         case RowId::Fov: Rdr().fov = uint32_t(StepRange(int(Rdr().fov), 45, 140, 1, step)); break;
@@ -487,6 +491,7 @@ std::string Text(RowId id, Settings& s) {
         case RowId::Aniso: return kAnisoNames[NearestIndex(kAnisoValues, s.aniso)];
         case RowId::Msaa: return kMsaaNames[NearestIndex(kMsaaValues, Rdr().msaa)];
         case RowId::DumpFormat: return kDumpFormatNames[std::min(s.texture_dump_format, 1u)];
+        case RowId::FmvScale: return NameText(Rdr().fmv_scale, kFmvScaleNames);
         case RowId::ColourBlind: return NameText(Rdr().colour_blind, kColourBlindNames);
         case RowId::Fov: {
             uint32_t v = Rdr().fov;
@@ -580,6 +585,7 @@ void RestoreDefaults(int page) {
     r.monitor = fresh.monitor;
     r.fps_counter = fresh.fps_counter;
     r.fov = fresh.fov;
+    r.fmv_scale = fresh.fmv_scale;
     r.colour_blind = fresh.colour_blind;
     r.contrast = fresh.contrast;
     r.hdr_output = fresh.hdr_output;
