@@ -80,6 +80,7 @@ enum class RowId {
     PadAimHorizontal,
     PadAimVertical,
     InvertPadX,
+    PadDeadZone,
     VibrationStrength,
     GyroAiming,
     GyroSensitivity,
@@ -133,12 +134,13 @@ constexpr Row kMouseRows[] = {
     {RowId::WalkSpeed, "WALK SPEED"},
 };
 
-// the game has its own sensitivity, Y axis invert, vibration and dead zone in its options
+// the game has its own sensitivity, Y axis invert and vibration in its options
 constexpr Row kControllerRows[] = {
     {RowId::Heading, "GENERAL"},
     {RowId::PadAimHorizontal, "AIM HORIZONTAL SENSITIVITY"},
     {RowId::PadAimVertical, "AIM VERTICAL SENSITIVITY"},
     {RowId::InvertPadX, "INVERT X-AXIS"},
+    {RowId::PadDeadZone, "DEADZONE"},
     {RowId::VibrationStrength, "VIBRATION STRENGTH"},
     {RowId::Heading, "GYRO"},
     {RowId::GyroAiming, "GYRO AIMING"},
@@ -412,6 +414,13 @@ void Step(RowId id, int step, Settings& s) {
             break;
         // 10% to 90% in steps of 10
         case RowId::WalkSpeed: Rdr().walk_speed = uint32_t(StepRange(int(Rdr().walk_speed), 10, 90, 10, step)); break;
+        // 0.1 to 1 in steps of 0.1, from the game's own while it is kept
+        case RowId::PadDeadZone: {
+            float& zone = Rdr().pad_dead_zone;
+            float shown = zone > 0.0f ? zone : GameDeadZone().load();
+            zone = float(StepRange(int(std::lround(shown * 10.0f)), 1, 10, 1, step)) / 10.0f;
+            break;
+        }
         // 10% to 200% in steps of 10
         case RowId::VibrationStrength: {
             uint32_t& v = Rdr().vibration_strength;
@@ -472,6 +481,11 @@ std::string Text(RowId id, Settings& s) {
         case RowId::WalkSpeed: {
             uint32_t v = Rdr().walk_speed;
             return std::to_string(v) + (v == 50 ? "% (DEFAULT)" : "%");
+        }
+        case RowId::PadDeadZone: {
+            float zone = Rdr().pad_dead_zone;
+            if (zone > 0.0f) return SensitivityText(zone);
+            return SensitivityText(GameDeadZone()) + " (DEFAULT)";
         }
         case RowId::VibrationStrength: {
             uint32_t v = Rdr().vibration_strength;
@@ -534,6 +548,7 @@ void RestoreDefaults(int page) {
         r.pad_aim_horizontal_sensitivity = fresh.pad_aim_horizontal_sensitivity;
         r.pad_aim_vertical_sensitivity = fresh.pad_aim_vertical_sensitivity;
         r.invert_pad_x = fresh.invert_pad_x;
+        r.pad_dead_zone = fresh.pad_dead_zone;
         r.vibration_strength = fresh.vibration_strength;
         r.gyro = fresh.gyro;
         Save();

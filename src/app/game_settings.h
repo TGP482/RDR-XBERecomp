@@ -31,6 +31,7 @@ struct RdrSettings {
     float pad_aim_horizontal_sensitivity = 1.0f;
     float pad_aim_vertical_sensitivity = 1.0f;
     bool invert_pad_x = false;
+    float pad_dead_zone = 0.0f;  // both sticks, 0.1 to 1; 0 keeps the game's own
     uint32_t vibration_strength = 100;  // percent of the game's rumble, 10 to 200
     gyro::Settings gyro;
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default
@@ -39,6 +40,8 @@ struct RdrSettings {
 RdrSettings& Rdr();
 // the toggle HUD key's state, not saved
 std::atomic<bool>& HudHidden();
+// the stick dead zone the game loaded from its pad file, set by the game side
+std::atomic<float>& GameDeadZone();
 // the window's display has Windows HDR on, as the renderer last saw
 std::atomic<bool>& HdrDisplay();
 // GameInfo hooks: the settings file's toml::table

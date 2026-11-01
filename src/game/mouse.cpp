@@ -1,4 +1,4 @@
-// The mouse and gyro on the game side.
+// The mouse, gyro and stick dead zone on the game side.
 // Each pad update the game's state machine says whether the player is in play, a menu, the pause menu or a cutscene.
 // Aiming, the mouse and gyro turn the view by an angle: the player's heading turns by the yaw and the aim's pitch
 // moves by the pitch, through the game's own limits, so a count is always the same angle. Out of aim, in the
@@ -40,6 +40,9 @@ constexpr uint32_t kLookRateMost = 0x4136B4;
 constexpr uint32_t kLookRateBase = 0x681BB4;
 constexpr uint32_t kBoostScale = 0x413650;
 constexpr uint32_t kBoostScaleFine = 0x3E4248;
+// swioPad's dead zones from its pad file, a stick reads as centred inside: the left stick, the right
+constexpr uint32_t kDeadZoneLeft = 0x4164E0;
+constexpr uint32_t kDeadZoneRight = 0x4164E4;
 // swioPad: +4 the console port it reads, +0x70 the input channels the game takes now, +0x98 a recording plays back
 constexpr uint32_t kPadPort = 0x4;
 constexpr uint32_t kPadChannels = 0x70;
@@ -160,6 +163,29 @@ void AddTurn(uint32_t player, uint32_t stick) {
     WriteFloat(stick + 4, y);
 }
 
+// Each pad update the setting goes into the game's dead zones, the setting's 0 puts the game's own back. A value there
+// that is not the last one written is the pad file's.
+struct DeadZone {
+    float game = 0.0f;
+    float written = -1.0f;
+};
+DeadZone g_left_zone;
+DeadZone g_right_zone;
+
+void UpdateDeadZone(uint32_t va, DeadZone& zone) {
+    float now = ReadFloat(va);
+    if (now != zone.written) zone.game = now;
+    float setting = app::Rdr().pad_dead_zone;
+    zone.written = setting > 0.0f ? setting : zone.game;
+    WriteFloat(va, zone.written);
+}
+
+void UpdateDeadZones() {
+    UpdateDeadZone(kDeadZoneLeft, g_left_zone);
+    UpdateDeadZone(kDeadZoneRight, g_right_zone);
+    app::GameDeadZone() = g_left_zone.game;
+}
+
 }  // namespace
 
 // ioInput update: the pads, then their listeners
@@ -171,6 +197,7 @@ X86_FUNC(sub_00048390) {
     if (!play) g_player = 0;
     g_motion = play ? TakeMotion() : Motion{};
     g_turns_look = g_player && Aiming(g_player);
+    UpdateDeadZones();
     __imp__sub_00048390(ctx, base);
 }
 
