@@ -64,6 +64,7 @@ enum class RowId {
     Contrast,
     Aniso,
     Smaa,
+    ScreenBlur,
     PauseOnFocusLoss,
     SkipIntros,
     AudioOutput,
@@ -112,6 +113,7 @@ constexpr Row kSettingsRows[] = {
     {RowId::Heading, "GRAPHICS"},
     {RowId::Smaa, "SMAA"},
     {RowId::Aniso, "ANISOTROPIC FILTERING"},
+    {RowId::ScreenBlur, "SCREEN BLUR"},
     {RowId::Heading, "GENERAL"},
     {RowId::SkipIntros, "SKIP INTROS"},
     {RowId::PauseOnFocusLoss, "PAUSE ON FOCUS LOSS"},
@@ -351,6 +353,7 @@ bool* ToggleFlag(Settings& s, RowId id) {
         case RowId::FpsCounter: return &r.fps_counter;
         case RowId::HdrOutput: return &r.hdr_output;
         case RowId::Smaa: return &r.smaa;
+        case RowId::ScreenBlur: return &r.screen_blur;
         case RowId::PauseOnFocusLoss: return &r.pause_on_focus_loss;
         case RowId::SkipIntros: return &r.skip_intros;
         case RowId::TextureReplacement: return &s.custom_textures;
@@ -563,6 +566,7 @@ void RestoreDefaults(int page) {
     r.contrast = fresh.contrast;
     r.hdr_output = fresh.hdr_output;
     r.smaa = fresh.smaa;
+    r.screen_blur = fresh.screen_blur;
     r.pause_on_focus_loss = fresh.pause_on_focus_loss;
     r.skip_intros = fresh.skip_intros;
     r.audio_output = fresh.audio_output;

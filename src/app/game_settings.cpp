@@ -65,6 +65,7 @@ void LoadRdr(const void* table) {
     s.contrast = std::min(t["contrast"].value_or(s.contrast), 100u);
     s.hdr_output = t["hdr_output"].value_or(s.hdr_output);
     s.smaa = t["smaa"].value_or(s.smaa);
+    s.screen_blur = t["screen_blur"].value_or(s.screen_blur);
     s.pause_on_focus_loss = t["pause_on_focus_loss"].value_or(s.pause_on_focus_loss);
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
     s.audio_output = std::min(t["audio_output"].value_or(s.audio_output), audio::kOutputMono);
@@ -100,6 +101,7 @@ void SaveRdr(void* table) {
     t.insert("contrast", int64_t(s.contrast));
     t.insert("hdr_output", s.hdr_output);
     t.insert("smaa", s.smaa);
+    t.insert("screen_blur", s.screen_blur);
     t.insert("pause_on_focus_loss", s.pause_on_focus_loss);
     t.insert("skip_intros", s.skip_intros);
     t.insert("audio_output", int64_t(s.audio_output));

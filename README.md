@@ -28,6 +28,7 @@ The latest version of [RDR-XBERecomp](https://github.com/TGP482/RDR-XBERecomp/re
 ### Graphics
 - **Subpixel Morphological Antialiasing (SMAA)** - Enables SMAA to smooth jagged edges across the whole frame with a softer image. SMAA also smooths alpha-tested edges such as fences and foliage.
 - **Anisotropic Filtering** - Forces the selected anisotropic filtering level on all textures.
+- **Screen Blur** - Toggles the screen blur the game applies during gameplay.
 
 ### Textures
 - **Texture Replacement** - Replaces the game's textures with the .dds or .png images in the textures\replacement folder beside the exe.

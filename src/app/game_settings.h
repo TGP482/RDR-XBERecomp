@@ -16,6 +16,7 @@ struct RdrSettings {
     uint32_t contrast = 50;     // 0 to 100, 50 leaves the picture alone
     bool hdr_output = true;  // HDR10 on a display with Windows HDR on
     bool smaa = false;
+    bool screen_blur = true;  // the game's screen blur in play
     bool pause_on_focus_loss = true;  // the game and its sound stop while the window is in the background
     bool skip_intros = false;         // the Rockstar logo video at boot
     uint32_t audio_output = 0;        // audio::kOutputAuto, kOutputStereo, kOutputSurround or kOutputMono
