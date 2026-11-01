@@ -18,7 +18,7 @@ struct RdrSettings {
     bool smaa = false;
     bool screen_blur = true;  // the game's screen blur in play
     bool pause_on_focus_loss = true;  // the game and its sound stop while the window is in the background
-    bool skip_intros = false;         // the Rockstar logo video at boot
+    bool skip_intros = false;         // the Rockstar logo and titles videos at boot
     uint32_t audio_output = 0;        // audio::kOutputAuto, kOutputStereo, kOutputSurround or kOutputMono
     // the mouse's look, the aim ones times the others while aiming
     float mouse_sensitivity = 1.0f;  // horizontal
