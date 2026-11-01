@@ -4,6 +4,9 @@
 // turns by the yaw and the aim's pitch moves by the pitch, through the game's own limits. In a duel the turn moves the
 // reticle's yaw and pitch. Out of aim the camera machine's own angles turn: the follow camera's bearing and the tilt
 // it reads back from the view, the wagon camera's swing, the mounted gun camera's yaw and pitch.
+// No aim assist on the mouse: while the keyboard and mouse were used last, aiming finds no target to soft lock onto,
+// so nothing pulls the aim, and a soft lock the controller made is let go. Duels and Dead Eye lock their own way and
+// stay as they are.
 #include <cmath>
 #include <cstring>
 #include <string_view>
@@ -25,6 +28,10 @@ constexpr uint32_t kGameRunning = 0x40EA24;
 // player controller: its swioPad; the aim state (0 aiming, 1 not, 2 starting, 3 stopping)
 constexpr uint32_t kPlayerPad = 0x894;
 constexpr uint32_t kAimState = 0x600;
+// player controller: the soft lock's two flags, set only when aiming soft locks a target (sub_00148D10); the game's
+// release of the player's target, thiscall(player, hud effect) ret 4
+constexpr uint32_t kSoftLockFlags = 0x6A9;
+constexpr uint32_t kReleaseTarget = 0x13D5F0;
 // player controller look: its yaw and pitch (the duel reticle), the heading the aim turns, the flick boost of its turn
 // rate, the two headings it turns
 constexpr uint32_t kLookYaw = 0x67C;
@@ -115,6 +122,15 @@ bool Aiming(uint32_t player) {
 bool PortZero(uint32_t player) {
     uint32_t pad = R32(player + kPlayerPad);
     return pad && R32(pad + kPadPort) == 0;
+}
+
+// lets go of a soft lock once the keyboard and mouse take over, as the targeting update does
+void DropSoftLock(X86Context& ctx, uint32_t player) {
+    if (!G<uint8_t>(player + kSoftLockFlags) || !input::KeyboardActive()) return;
+    W16(player + kSoftLockFlags, 0);
+    ctx.ecx = player;
+    CallGuest(ctx, kReleaseTarget, {0});
+    ctx.ecx = player;
 }
 
 float ReadFloat(uint32_t va) { return GF(va); }
@@ -265,6 +281,7 @@ X86_FUNC(sub_00143350) {
     if (PortZero(player)) {
         input::SetAiming(aiming);
         if (aiming) {
+            DropSoftLock(ctx, player);
             Turn t = TakeTurn();
             AddAimTurn(player, stick, t);
             AddCameraTurn(t);
@@ -335,3 +352,15 @@ X86_FUNC(sub_0029FDA0) {
     }
     __imp__sub_0029FDA0(ctx, base);
 }
+
+// the aim's soft lock searches, thiscall(player, ...), from the targeting update (sub_00148D10), a target or 0
+#define SOFT_LOCK_SEARCH(name)                                               \
+    X86_EXTERN_FUNC(__imp__##name);                                          \
+    X86_FUNC(name) {                                                         \
+        uint32_t player = ctx.ecx;                                           \
+        __imp__##name(ctx, base);                                            \
+        if (PortZero(player) && input::KeyboardActive()) ctx.eax = 0;        \
+    }
+
+SOFT_LOCK_SEARCH(sub_00141D50)
+SOFT_LOCK_SEARCH(sub_00142850)
