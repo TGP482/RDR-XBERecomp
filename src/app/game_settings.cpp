@@ -3,6 +3,14 @@
 #include <algorithm>
 #include <iterator>
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
 #include <toml++/toml.hpp>
 
 #include "audio/audio.h"
@@ -10,6 +18,17 @@
 namespace app {
 
 namespace {
+
+// the Windows display language when the game has it, else English
+uint32_t SystemLanguage() {
+    switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
+        case LANG_FRENCH: return 2;
+        case LANG_GERMAN: return 3;
+        case LANG_ITALIAN: return 4;
+        case LANG_SPANISH: return 5;
+        default: return 1;
+    }
+}
 
 float ReadFloat(const toml::table& t, const char* key, float fallback) {
     return float(t[key].value_or(double(fallback)));
@@ -51,6 +70,13 @@ std::atomic<float>& GameDeadZone() {
     return zone;
 }
 
+uint32_t ResolveLanguage(uint32_t setting) { return setting ? setting : SystemLanguage(); }
+
+uint32_t BootLanguage() {
+    static const uint32_t language = ResolveLanguage(Rdr().language);
+    return language;
+}
+
 std::atomic<float>& FrameRate() {
     static std::atomic<float> fps{0};
     return fps;
@@ -77,6 +103,7 @@ void LoadRdr(const void* table) {
     s.screen_blur = t["screen_blur"].value_or(s.screen_blur);
     s.pause_on_focus_loss = t["pause_on_focus_loss"].value_or(s.pause_on_focus_loss);
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
+    s.language = std::min(t["language"].value_or(s.language), 5u);
     s.audio_output = std::min(t["audio_output"].value_or(s.audio_output), audio::kOutputMono);
     audio::SetOutputMode(s.audio_output);
     s.mouse_sensitivity = ReadFloat(t, "mouse_sensitivity", s.mouse_sensitivity);
@@ -118,6 +145,7 @@ void SaveRdr(void* table) {
     t.insert("screen_blur", s.screen_blur);
     t.insert("pause_on_focus_loss", s.pause_on_focus_loss);
     t.insert("skip_intros", s.skip_intros);
+    t.insert("language", int64_t(s.language));
     t.insert("audio_output", int64_t(s.audio_output));
     t.insert("mouse_sensitivity", double(s.mouse_sensitivity));
     t.insert("mouse_vertical_sensitivity", double(s.mouse_vertical_sensitivity));

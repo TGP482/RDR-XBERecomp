@@ -7,6 +7,7 @@
 #include <iterator>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -24,6 +25,7 @@
 #include "app/game_settings.h"
 #include "app/menu.h"
 #include "app/panel_colors.h"
+#include "app/translations.h"
 #include "audio/audio.h"
 #include "core/input.h"
 
@@ -46,6 +48,8 @@ const char* const kFmvScaleNames[] = {"FILL", "4:3"};
 const char* const kColourBlindNames[] = {"OFF", "PROTANOPIA", "DEUTERANOPIA", "TRITANOPIA"};
 constexpr uint32_t kAudioOutputs[] = {audio::kOutputAuto, audio::kOutputMono, audio::kOutputStereo,
                                       audio::kOutputSurround};
+// automatic, then the game's languages
+const char* const kLanguageNames[] = {"AUTOMATIC", "ENGLISH", "FRENCH", "GERMAN", "ITALIAN", "SPANISH"};
 const char* const kAudioOutputNames[] = {"AUTOMATIC", "MONO", "2.0 STEREO", "5.1 SURROUND"};
 
 // render resolution in percent of the output
@@ -74,6 +78,7 @@ enum class RowId {
     Smaa,
     ScreenBlur,
     PauseOnFocusLoss,
+    Language,
     SkipIntros,
     AudioOutput,
     TextureReplacement,
@@ -130,6 +135,7 @@ constexpr Row kSettingsRows[] = {
     {RowId::Heading, "GENERAL"},
     {RowId::SkipIntros, "SKIP INTROS"},
     {RowId::PauseOnFocusLoss, "PAUSE ON FOCUS LOSS"},
+    {RowId::Language, "LANGUAGE"},
     {RowId::AudioOutput, "AUDIO OUTPUT"},
     {RowId::Heading, "TEXTURES"},
     {RowId::TextureReplacement, "TEXTURE REPLACEMENT"},
@@ -194,6 +200,29 @@ std::vector<Row> PageRows(int page) {
     if (page == kKeyboardPage) return KeyboardRows();
     if (page == kControllerPage) return {std::begin(kControllerRows), std::end(kControllerRows)};
     return {std::begin(kSettingsRows), std::end(kSettingsRows)};
+}
+
+// in the game's language, as ImGui's UTF-8; caps for the panel's capitals
+std::string Ui(std::string_view text, bool caps = true) {
+    static std::map<std::string, std::string> cache;
+    std::string key = std::string(text) + (caps ? "\1" : "\2");
+    if (auto it = cache.find(key); it != cache.end()) return it->second;
+    std::string out;
+    for (char16_t c : Translate(text)) {
+        // latin 1 lower case to upper; 0xF7 is the division sign
+        if (caps && ((c >= u'a' && c <= u'z') || (c >= 0xE0 && c <= 0xFE && c != 0xF7))) c -= 0x20;
+        if (c < 0x80) {
+            out += char(c);
+        } else if (c < 0x800) {
+            out += char(0xC0 | c >> 6);
+            out += char(0x80 | (c & 0x3F));
+        } else {
+            out += char(0xE0 | c >> 12);
+            out += char(0x80 | ((c >> 6) & 0x3F));
+            out += char(0x80 | (c & 0x3F));
+        }
+    }
+    return cache[key] = out;
 }
 
 // Values
@@ -427,6 +456,7 @@ void Step(RowId id, int step, Settings& s) {
         case RowId::Msaa: StepTable(kMsaaValues, Rdr().msaa, step); break;
         case RowId::DumpFormat: s.texture_dump_format = uint32_t(Wrap(int(s.texture_dump_format), step, 2)); break;
         case RowId::FmvScale: StepName(Rdr().fmv_scale, kFmvScaleNames, step); break;
+        case RowId::Language: StepName(Rdr().language, kLanguageNames, step); break;
         case RowId::ColourBlind: StepName(Rdr().colour_blind, kColourBlindNames, step); break;
         case RowId::Contrast: Rdr().contrast = uint32_t(StepRange(int(Rdr().contrast), 0, 100, 1, step)); break;
         case RowId::Fov: Rdr().fov = uint32_t(StepRange(int(Rdr().fov), 45, 140, 1, step)); break;
@@ -497,6 +527,10 @@ std::string Text(RowId id, Settings& s) {
         case RowId::Msaa: return kMsaaNames[NearestIndex(kMsaaValues, Rdr().msaa)];
         case RowId::DumpFormat: return kDumpFormatNames[std::min(s.texture_dump_format, 1u)];
         case RowId::FmvScale: return NameText(Rdr().fmv_scale, kFmvScaleNames);
+        case RowId::Language: {
+            bool restart = ResolveLanguage(Rdr().language) != BootLanguage();
+            return std::string(NameText(Rdr().language, kLanguageNames)) + (restart ? " (RESTART)" : "");
+        }
         case RowId::ColourBlind: return NameText(Rdr().colour_blind, kColourBlindNames);
         case RowId::Fov: {
             uint32_t v = Rdr().fov;
@@ -600,6 +634,7 @@ void RestoreDefaults(int page) {
     r.screen_blur = fresh.screen_blur;
     r.pause_on_focus_loss = fresh.pause_on_focus_loss;
     r.skip_intros = fresh.skip_intros;
+    r.language = fresh.language;
     r.audio_output = fresh.audio_output;
     audio::SetOutputMode(r.audio_output);
     g_display_held = false;
@@ -682,7 +717,7 @@ RowBox MeasureRow() {
 void RowLabel(const RowBox& box, const char* label) {
     ImGui::SetCursorPos(ImVec2(box.row_x + ImGui::GetStyle().ItemInnerSpacing.x, box.row_y));
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
+    ImGui::TextUnformatted(Ui(label).c_str());
 }
 
 // the cursor back to the row's start, then past the whole row
@@ -695,7 +730,7 @@ void Section(const char* title) {
     float em = ImGui::GetFontSize();
     ImGui::Dummy(ImVec2(0, em * 0.5f));
     ImGui::PushStyleColor(ImGuiCol_Text, kHeading);
-    ImGui::TextUnformatted(title);
+    ImGui::TextUnformatted(Ui(title).c_str());
     ImGui::PopStyleColor();
     ImGui::Separator();
     ImGui::Dummy(ImVec2(0, em * 0.2f));
@@ -709,7 +744,9 @@ int FocusedStep() {
 }
 
 // the value centred between its arrows; a click on one is a step
-int ValueBlock(const RowBox& box, const char* value) {
+int ValueBlock(const RowBox& box, const char* english) {
+    std::string shown = Ui(english);
+    const char* value = shown.c_str();
     const ImGuiStyle& style = ImGui::GetStyle();
     int step = 0;
     ImGui::PushItemFlag(ImGuiItemFlags_NoNav | ImGuiItemFlags_ButtonRepeat, true);  // held arrows keep stepping
@@ -761,7 +798,7 @@ KeyBox DrawKeyBox(float x, float y, float w, float h, const std::string& key, bo
     bool lit = capturing || focused || ImGui::IsItemHovered();
     ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
                                               ImGui::GetColorU32(lit ? ImGuiCol_Header : ImGuiCol_FrameBg));
-    std::string text = capturing ? "PRESS A KEY" : key;
+    std::string text = Ui(capturing ? "PRESS A KEY" : key);
     float pad = (w - ImGui::CalcTextSize(text.c_str()).x) * 0.5f;
     ImGui::SetCursorPos(ImVec2(x + std::max(pad, 0.0f), y));
     ImGui::AlignTextToFramePadding();
@@ -838,7 +875,8 @@ void DrawTabs() {
         for (int i = 0; i < count; i++) {
             ImGui::SetNextItemWidth(w);
             ImGuiTabItemFlags flags = set && i == g_page ? ImGuiTabItemFlags_SetSelected : 0;
-            if (ImGui::BeginTabItem(kPages[i], nullptr, flags)) {
+            std::string tab = Ui(kPages[i]) + "###" + kPages[i];
+            if (ImGui::BeginTabItem(tab.c_str(), nullptr, flags)) {
                 if (!set && i != g_page) {
                     g_page = i;
                     g_capture = -1;
@@ -863,15 +901,15 @@ void DrawButtons() {
     float bw = ImGui::GetFontSize() * 8;
     float pad = ImGui::GetContentRegionAvail().x - bw * 3 - ImGui::GetStyle().ItemSpacing.x * 2;
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(pad, 0.0f));
-    if (ImGui::Button("Back", ImVec2(bw, 0))) ToggleMenu();
+    if (ImGui::Button((Ui("Back", false) + "###back").c_str(), ImVec2(bw, 0))) ToggleMenu();
     ImGui::SameLine();
-    if (ImGui::Button("Defaults", ImVec2(bw, 0))) {
+    if (ImGui::Button((Ui("Defaults", false) + "###defaults").c_str(), ImVec2(bw, 0))) {
         g_capture = -1;
         RestoreDefaults(g_page);
     }
     ImGui::SameLine();
     ImGui::BeginDisabled(!g_display_held);
-    if (ImGui::Button("Apply", ImVec2(bw, 0))) ApplyHeld();
+    if (ImGui::Button((Ui("Apply", false) + "###apply").c_str(), ImVec2(bw, 0))) ApplyHeld();
     ImGui::EndDisabled();
 }
 
@@ -894,7 +932,7 @@ void DrawPanel() {
     constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
                                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar;
     if (ImGui::Begin("##settings", nullptr, kFlags)) {
-        DrawTitle("SETTINGS");
+        DrawTitle(Ui("SETTINGS").c_str());
         DrawTabs();
         float footer = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() + em;
         ImGui::BeginChild("##rows", ImVec2(0, -footer), ImGuiChildFlags_NavFlattened);
@@ -903,7 +941,7 @@ void DrawPanel() {
         ImGui::EndChild();
         ImGui::Separator();
         ImGui::PushStyleColor(ImGuiCol_Text, kDim);
-        ImGui::TextUnformatted(Hint());
+        ImGui::TextUnformatted(Ui(Hint(), false).c_str());
         ImGui::PopStyleColor();
         DrawButtons();
     }

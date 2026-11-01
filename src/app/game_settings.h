@@ -25,6 +25,7 @@ struct RdrSettings {
     bool screen_blur = true;  // the game's screen blur in play
     bool pause_on_focus_loss = true;  // the game and its sound stop while the window is in the background
     bool skip_intros = false;         // the Rockstar logo and titles videos at boot
+    uint32_t language = 0;  // 0 automatic (the Windows display language), 1 English, 2 French, 3 German, 4 Italian, 5 Spanish
     uint32_t audio_output = 0;        // audio::kOutputAuto, kOutputStereo, kOutputSurround or kOutputMono
     // the mouse's look, the aim ones times the others while aiming
     float mouse_sensitivity = 1.0f;  // horizontal
@@ -46,6 +47,9 @@ struct RdrSettings {
 };
 
 RdrSettings& Rdr();
+// a language setting with automatic resolved; BootLanguage: the setting as this run started, which the game read
+uint32_t ResolveLanguage(uint32_t setting);
+uint32_t BootLanguage();
 // the toggle HUD key's state, not saved
 std::atomic<bool>& HudHidden();
 // the stick dead zone the game loaded from its pad file, set by the game side
