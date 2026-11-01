@@ -26,7 +26,8 @@ The latest version of [RDR-XBERecomp](https://github.com/TGP482/RDR-XBERecomp/re
 - **Colour Blind Mode** - Adjusts the colours for protanopia, deuteranopia or tritanopia.
 
 ### Graphics
-- **Subpixel Morphological Antialiasing (SMAA)** - Enables SMAA to smooth jagged edges across the whole frame with a softer image. SMAA also smooths alpha-tested edges such as fences and foliage.
+- **Multisample Antialiasing (MSAA)** - Enables 2x, 4x or 8x MSAA to smooth jagged edges while preserving a sharp image. MSAA does not smooth alpha-tested edges such as fences and foliage.
+- **Subpixel Morphological Antialiasing (SMAA)** - Enables SMAA to smooth jagged edges across the whole frame with a softer image. SMAA also smooths alpha-tested edges such as fences and foliage, and can be combined with MSAA.
 - **Anisotropic Filtering** - Forces the selected anisotropic filtering level on all textures.
 - **Screen Blur** - Toggles the screen blur the game applies during gameplay.
 
