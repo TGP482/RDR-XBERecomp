@@ -77,6 +77,7 @@ enum class RowId {
     AimVertical,
     InvertMouseX,
     InvertMouseY,
+    AimToggle,
     WalkSpeed,
     PadAimHorizontal,
     PadAimVertical,
@@ -132,6 +133,7 @@ constexpr Row kMouseRows[] = {
     {RowId::AimVertical, "AIM VERTICAL SENSITIVITY"},
     {RowId::InvertMouseX, "INVERT X-AXIS"},
     {RowId::InvertMouseY, "INVERT Y-AXIS"},
+    {RowId::AimToggle, "AIM TOGGLE"},
     {RowId::Heading, "KEYBOARD"},
     {RowId::WalkSpeed, "WALK SPEED"},
 };
@@ -360,6 +362,7 @@ bool* ToggleFlag(Settings& s, RowId id) {
         case RowId::TextureDumping: return &s.dump_textures;
         case RowId::InvertMouseX: return &r.invert_mouse_x;
         case RowId::InvertMouseY: return &r.invert_mouse;
+        case RowId::AimToggle: return &r.aim_toggle;
         case RowId::InvertPadX: return &r.invert_pad_x;
         case RowId::GyroAiming: return &r.gyro.enabled;
         default: return nullptr;
@@ -543,6 +546,7 @@ void RestoreDefaults(int page) {
         r.aim_vertical_sensitivity = fresh.aim_vertical_sensitivity;
         r.invert_mouse = fresh.invert_mouse;
         r.invert_mouse_x = fresh.invert_mouse_x;
+        r.aim_toggle = fresh.aim_toggle;
         r.walk_speed = fresh.walk_speed;
         input::ResetBindings();
         return;

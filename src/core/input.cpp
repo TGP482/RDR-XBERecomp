@@ -133,6 +133,7 @@ void RefreshCursor() {
 // the right stick up and down; the walk key slows the move keys; host keys press nothing on the pad
 constexpr int kAnalogA = 0;
 constexpr int kAnalogB = 1;
+constexpr int kAnalogLeftTrigger = 6;
 constexpr int kButtonTarget = 8;
 constexpr int kDpadUp = 0;
 constexpr int kDpadDown = 1;
@@ -166,7 +167,7 @@ constexpr Target kActions[] = {
     {{"action", "ACTION / SNEAK", "E"}, 3},
     {{"melee", "MELEE", "F"}, kAnalogB},
     {{"fire", "FIRE", "LMB"}, 7},
-    {{"draw", "DRAW / TARGET", "RMB"}, 6},
+    {{"draw", "DRAW / TARGET", "RMB"}, kAnalogLeftTrigger},
     {{"reload", "RELOAD", "R"}, 2},
     {{"dead_eye", "DEAD EYE", "Q,MMB"}, kButtonTarget + 7},
     {{"special", "SPECIAL MOVE / ZOOM", "Z"}, 4},
@@ -404,6 +405,21 @@ void PressMenuKeys(Pad& p) {
     }
 }
 
+// With the aim toggle on, in play a press of the draw key draws and holds until the next press
+bool g_aim_latched = false;
+bool g_aim_key_was = false;
+
+bool ToggledAim(bool held) {
+    bool press = held && !g_aim_key_was;
+    g_aim_key_was = held;
+    if (!app::Rdr().aim_toggle || !InPlay()) {
+        g_aim_latched = false;
+        return held;
+    }
+    if (press) g_aim_latched = !g_aim_latched;
+    return g_aim_latched;
+}
+
 void NoteKeysHeld(uint32_t keys) {
     if (keys & ~g_keys_held.exchange(keys)) g_keyboard_ms = NowMs();
 }
@@ -435,7 +451,10 @@ void Keyboard(Pad& p) {
     Sticks sticks;
     uint32_t keys = 0;
     for (size_t i = 0; i < kCount; i++) {
-        if (kActions[i].button == kHostKey || !ActionHeld(binds[i], menu)) continue;
+        if (kActions[i].button == kHostKey) continue;
+        bool held = ActionHeld(binds[i], menu);
+        if (kActions[i].button == kAnalogLeftTrigger) held = ToggledAim(held);
+        if (!held) continue;
         keys |= 1u << i;
         PressTarget(RemapTarget(kActions[i].button), p, sticks);
     }

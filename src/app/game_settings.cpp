@@ -76,6 +76,7 @@ void LoadRdr(const void* table) {
     s.aim_vertical_sensitivity = ReadFloat(t, "aim_vertical_sensitivity", s.aim_vertical_sensitivity);
     s.invert_mouse = t["invert_mouse"].value_or(s.invert_mouse);
     s.invert_mouse_x = t["invert_mouse_x"].value_or(s.invert_mouse_x);
+    s.aim_toggle = t["aim_toggle"].value_or(s.aim_toggle);
     s.walk_speed = std::clamp(t["walk_speed"].value_or(s.walk_speed), 10u, 90u);
     s.pad_aim_horizontal_sensitivity =
         ReadFloat(t, "pad_aim_horizontal_sensitivity", s.pad_aim_horizontal_sensitivity);
@@ -111,6 +112,7 @@ void SaveRdr(void* table) {
     t.insert("aim_vertical_sensitivity", double(s.aim_vertical_sensitivity));
     t.insert("invert_mouse", s.invert_mouse);
     t.insert("invert_mouse_x", s.invert_mouse_x);
+    t.insert("aim_toggle", s.aim_toggle);
     t.insert("walk_speed", int64_t(s.walk_speed));
     t.insert("pad_aim_horizontal_sensitivity", double(s.pad_aim_horizontal_sensitivity));
     t.insert("pad_aim_vertical_sensitivity", double(s.pad_aim_vertical_sensitivity));
