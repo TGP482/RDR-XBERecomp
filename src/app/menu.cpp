@@ -123,8 +123,8 @@ constexpr Row kSettingsRows[] = {
 
 constexpr Row kMouseRows[] = {
     {RowId::Heading, "MOUSE"},
-    {RowId::MouseHorizontal, "MOUSE HORIZONTAL SENSITIVITY"},
-    {RowId::MouseVertical, "MOUSE VERTICAL SENSITIVITY"},
+    {RowId::MouseHorizontal, "HORIZONTAL SENSITIVITY"},
+    {RowId::MouseVertical, "VERTICAL SENSITIVITY"},
     {RowId::AimHorizontal, "AIM HORIZONTAL SENSITIVITY"},
     {RowId::AimVertical, "AIM VERTICAL SENSITIVITY"},
     {RowId::InvertMouseX, "INVERT X-AXIS"},
@@ -214,8 +214,13 @@ uint32_t StepRenderPercent(uint32_t percent, int step) {
     return uint32_t(StepRange(int(percent), kRenderMin, kRenderMax, kRenderStep, step));
 }
 
-// 0.1 to 5.0 in steps of 0.1
+// 0.1 to 20.0 in steps of 0.1, shown as five times the stored value so the game's own reads 5.0
 void StepSensitivity(float& v, int step) {
+    v = float(StepRange(int(std::lround(v * 50.0f)), 1, 200, 1, step)) / 50.0f;
+}
+
+// 0.1 to 5.0 in steps of 0.1
+void StepGyroSensitivity(float& v, int step) {
     v = float(StepRange(int(std::lround(v * 10.0f)), 1, 50, 1, step)) / 10.0f;
 }
 
@@ -390,7 +395,8 @@ void Step(RowId id, int step, Settings& s) {
         return;
     }
     if (float* v = Sensitivity(id)) {
-        StepSensitivity(*v, step);
+        if (id == RowId::GyroSensitivity) StepGyroSensitivity(*v, step);
+        else StepSensitivity(*v, step);
         return;
     }
     switch (id) {
@@ -448,7 +454,10 @@ std::string GyroText(RowId id) {
 std::string Text(RowId id, Settings& s) {
     if (id == RowId::HdrOutput && !HdrDisplay()) return "NOT SUPPORTED";
     if (bool* flag = ToggleFlag(s, id)) return *flag ? "ON" : "OFF";
-    if (float* v = Sensitivity(id)) return SensitivityText(*v);
+    if (float* v = Sensitivity(id)) {
+        if (id == RowId::GyroSensitivity) return SensitivityText(*v);
+        return SensitivityText(std::clamp(*v * 5.0f, 0.1f, 20.0f));
+    }
     switch (id) {
         case RowId::RenderResolution: return RenderText(s);
         case RowId::MaxFps: return FpsCapText(kFpsCaps[NearestIndex(kFpsCaps, s.fps_cap)]);

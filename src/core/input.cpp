@@ -604,8 +604,8 @@ bool TakeMouse(float& dx, float& dy) {
     if ((!x && !y) || !Active() || !InPlay()) return false;
     const app::RdrSettings& s = app::Rdr();
     bool aim = g_aiming;
-    dx = float(s.invert_mouse_x ? -x : x) * s.mouse_sensitivity * (aim ? s.aim_horizontal_sensitivity : 1.0f);
-    dy = float(s.invert_mouse ? -y : y) * s.mouse_vertical_sensitivity * (aim ? s.aim_vertical_sensitivity : 1.0f);
+    dx = float(s.invert_mouse_x ? -x : x) * (aim ? s.aim_horizontal_sensitivity : s.mouse_sensitivity);
+    dy = float(s.invert_mouse ? -y : y) * (aim ? s.aim_vertical_sensitivity : s.mouse_vertical_sensitivity);
     return true;
 }
 
