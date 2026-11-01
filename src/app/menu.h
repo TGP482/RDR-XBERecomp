@@ -1,4 +1,4 @@
-// the settings panel on F10 and the FPS counter
+// the settings panel on F10
 #pragma once
 #include <cstdint>
 

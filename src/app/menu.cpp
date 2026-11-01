@@ -1,4 +1,4 @@
-// the settings panel on F10 and the FPS counter
+// the settings panel on F10
 #include <algorithm>
 #include <atomic>
 #include <cctype>
@@ -892,17 +892,6 @@ void DrawPanel() {
     ImGui::PopStyleColor(int(std::size(kPanelColors)));
 }
 
-// top left, white with a black shadow
-void DrawFps(double fps) {
-    char text[32];
-    std::snprintf(text, sizeof(text), "FPS: %.1f", fps);
-    float size = ImGui::GetFontSize();
-    ImVec2 at(size * 0.5f, size * 0.5f);
-    ImDrawList* draw = ImGui::GetForegroundDrawList();
-    draw->AddText(ImGui::GetFont(), size, ImVec2(at.x + 1, at.y + 1), IM_COL32_BLACK, text);
-    draw->AddText(ImGui::GetFont(), size, at, IM_COL32_WHITE, text);
-}
-
 void ToggleTextureReplacement() {
     Get().custom_textures = !Get().custom_textures;
     Save();
@@ -929,7 +918,7 @@ void DrawUi(double fps) {
     else io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
     io.KeyRepeatRate = 0.1f;  // held arrows step ten times a second, ImGui's twenty is too fast for settings
     io.FontGlobalScale = std::max(1.0f, io.DisplaySize.y / 720.0f);
-    if (Rdr().fps_counter) DrawFps(fps);
+    FrameRate() = float(fps);
     if (!MenuOpen()) return;
     PollCapture();
     DrawPanel();

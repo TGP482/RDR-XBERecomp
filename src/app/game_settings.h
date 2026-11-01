@@ -45,6 +45,8 @@ RdrSettings& Rdr();
 std::atomic<bool>& HudHidden();
 // the stick dead zone the game loaded from its pad file, set by the game side
 std::atomic<float>& GameDeadZone();
+// the frame rate the renderer last measured, for the FPS counter
+std::atomic<float>& FrameRate();
 // the window's display has Windows HDR on, as the renderer last saw
 std::atomic<bool>& HdrDisplay();
 // GameInfo hooks: the settings file's toml::table

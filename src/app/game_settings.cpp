@@ -51,6 +51,11 @@ std::atomic<float>& GameDeadZone() {
     return zone;
 }
 
+std::atomic<float>& FrameRate() {
+    static std::atomic<float> fps{0};
+    return fps;
+}
+
 std::atomic<bool>& HudHidden() {
     static std::atomic<bool> hidden{false};
     return hidden;
