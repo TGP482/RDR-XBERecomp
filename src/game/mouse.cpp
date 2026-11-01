@@ -217,12 +217,15 @@ uint32_t CameraInput(uint32_t machine, uint32_t index) {
     return R32(R32(inputs + kInputArray) + 4 * index) + kInputValue;
 }
 
+void AddCameraTurn(Turn t) {
+    g_camera.turn.x += t.x;
+    g_camera.turn.y += t.y;
+}
+
 // the player's update fills the inputs twice a frame, so the turn adds up until the tick
 void LatchCameraTurn(uint32_t player) {
     g_camera.machine = CameraMachine(player);
-    Turn t = TakeTurn();
-    g_camera.turn.x += t.x;
-    g_camera.turn.y += t.y;
+    AddCameraTurn(TakeTurn());
 }
 
 void ApplyCameraTilt() {
@@ -252,7 +255,8 @@ X86_FUNC(sub_00048390) {
     __imp__sub_00048390(ctx, base);
 }
 
-// the player's look, thiscall(player, stick) ret 4; it runs before the camera's input
+// the player's look, thiscall(player, stick) ret 4, before the camera's input; aiming, the stick turns the camera
+// too, so the turn goes to both
 X86_EXTERN_FUNC(__imp__sub_00143350);
 X86_FUNC(sub_00143350) {
     uint32_t player = ctx.ecx;
@@ -260,7 +264,11 @@ X86_FUNC(sub_00143350) {
     bool aiming = Aiming(player);
     if (PortZero(player)) {
         input::SetAiming(aiming);
-        if (aiming) AddAimTurn(player, stick, TakeTurn());
+        if (aiming) {
+            Turn t = TakeTurn();
+            AddAimTurn(player, stick, t);
+            AddCameraTurn(t);
+        }
     }
     __imp__sub_00143350(ctx, base);
 }
