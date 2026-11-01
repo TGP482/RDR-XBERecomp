@@ -299,3 +299,8 @@ XPP_MemoryUnitType          = 0x3C7A20
 at = 0x351D91
 call = "ReadSampleTime"
 on_true = 0x351D96
+
+# the follow camera pivot has just read its bearing: the mouse turns it (src/game/mouse.cpp)
+[[hook]]
+at = 0x2A83A8
+call = "FollowCameraBearing"

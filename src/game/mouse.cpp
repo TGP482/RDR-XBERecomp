@@ -1,8 +1,9 @@
 // The mouse, gyro and stick dead zone on the game side.
 // Each pad update the game's state machine says whether the player is in play, a menu, the pause menu or a cutscene.
-// Aiming, the mouse and gyro turn the view by an angle: the player's heading turns by the yaw and the aim's pitch
-// moves by the pitch, through the game's own limits, so a count is always the same angle. Out of aim, in the
-// camera, riding or on a mounted gun, they are added to swioPad::GetJoystick's right stick past its dead zone.
+// The mouse and gyro turn the view by an angle, so a count is always the same angle. Aiming, the player's heading
+// turns by the yaw and the aim's pitch moves by the pitch, through the game's own limits. In a duel the turn moves the
+// reticle's yaw and pitch. Out of aim the camera machine's own angles turn: the follow camera's bearing and the tilt
+// it reads back from the view, the wagon camera's swing, the mounted gun camera's yaw and pitch.
 #include <cmath>
 #include <cstring>
 #include <string_view>
@@ -24,7 +25,10 @@ constexpr uint32_t kGameRunning = 0x40EA24;
 // player controller: its swioPad; the aim state (0 aiming, 1 not, 2 starting, 3 stopping)
 constexpr uint32_t kPlayerPad = 0x894;
 constexpr uint32_t kAimState = 0x600;
-// player controller look: the heading the look turns, the flick boost of its turn rate, the two headings it turns
+// player controller look: its yaw and pitch (the duel reticle), the heading the aim turns, the flick boost of its turn
+// rate, the two headings it turns
+constexpr uint32_t kLookYaw = 0x67C;
+constexpr uint32_t kLookPitch = 0x680;
 constexpr uint32_t kLookHeading = 0xA0C;
 constexpr uint32_t kLookBoost = 0x6DC;
 constexpr uint32_t kBodyHeading = 0x8EC;
@@ -33,27 +37,34 @@ constexpr uint32_t kCoverHeading = 0x91C;
 constexpr uint32_t kPlayerParts = 0xC;
 constexpr uint32_t kPartsMover = 0x74;
 constexpr uint32_t kMoverState = 0x38;
-// the look's turn rate a frame for a full stick: the base (the options' sensitivity) up to the most by the boost
+// the aim's turn rate a frame for a full stick: the base (the options' sensitivity) up to the most by the boost
 constexpr uint32_t kAimRateMost = 0x413654;
 constexpr uint32_t kAimRateBase = 0x681BA8;
-constexpr uint32_t kLookRateMost = 0x4136B4;
-constexpr uint32_t kLookRateBase = 0x681BB4;
 constexpr uint32_t kBoostScale = 0x413650;
 constexpr uint32_t kBoostScaleFine = 0x3E4248;
 // swioPad's dead zones from its pad file, a stick reads as centred inside: the left stick, the right
 constexpr uint32_t kDeadZoneLeft = 0x4164E0;
 constexpr uint32_t kDeadZoneRight = 0x4164E4;
-// swioPad: +4 the console port it reads, +0x70 the input channels the game takes now, +0x98 a recording plays back
+// swioPad: +4 the console port it reads
 constexpr uint32_t kPadPort = 0x4;
-constexpr uint32_t kPadChannels = 0x70;
-constexpr uint32_t kPadPlayback = 0x98;
 
-constexpr int kRightStick = 1;
+// player controller +0x88C its camera, +0x70 the camera's rig, +0x9C the rig's camera machine
+constexpr uint32_t kPlayerCamera = 0x88C;
+constexpr uint32_t kCameraRig = 0x70;
+constexpr uint32_t kRigMachine = 0x9C;
+// camera machine +0x18 its inputs, +4 their array; an input's value at +8; input 0x15 CameraTilt is the view's tilt
+// the player's update measures, up positive, which the follow camera turns from
+constexpr uint32_t kMachineInputs = 0x18;
+constexpr uint32_t kInputArray = 0x4;
+constexpr uint32_t kInputValue = 0x8;
+constexpr uint32_t kInputCameraTilt = 0x15;
+// camera actions: the wagon pivot's swing about the wagon; the mounted gun's yaw and pitch
+constexpr uint32_t kWagonSwing = 0x50;
+constexpr uint32_t kGatlingYaw = 0x5C;
+constexpr uint32_t kGatlingPitch = 0x60;
+
 constexpr float kRadiansPerCount = 0.0015f;
 constexpr float kRadiansPerDegree = 3.14159265f / 180.0f;
-// out of aim: a full stick turns the view 0.2 radians a frame at most
-constexpr float kStickPerCount = 0.006f;
-constexpr float kStickPerDegree = 0.42f;
 constexpr float kLeastRate = 0.0001f;
 
 std::string_view StateName() {
@@ -70,37 +81,31 @@ input::Screen CurrentScreen() {
     return cinematic ? input::Screen::Cutscene : input::Screen::Menu;
 }
 
-// the mouse and gyro this pad update: as a right stick in the game's axes (x right, y down), and as radians
-struct Stick {
+// this pad update's mouse and gyro turn in radians, x right and y down; the first of the aim, the duel or the camera
+// to run takes it
+struct Turn {
     float x = 0.0f;
     float y = 0.0f;
 };
-struct Motion {
-    Stick stick;
-    Stick turn;
-};
-Motion g_motion;
+Turn g_turn;
 
 // the gyro's yaw is left positive and its pitch down positive
-Motion TakeMotion() {
-    Motion m;
+Turn TakeMotion() {
+    Turn t;
     float dx;
     float dy;
-    if (input::TakeMouse(dx, dy)) {
-        m.stick = {dx * kStickPerCount, dy * kStickPerCount};
-        m.turn = {dx * kRadiansPerCount, dy * kRadiansPerCount};
-    }
+    if (input::TakeMouse(dx, dy)) t = {dx * kRadiansPerCount, dy * kRadiansPerCount};
     gyro::Turn g = gyro::Take(app::Rdr().gyro);
-    m.stick.x -= g.yaw * kStickPerDegree;
-    m.stick.y += g.pitch * kStickPerDegree;
-    m.turn.x -= g.yaw * kRadiansPerDegree;
-    m.turn.y += g.pitch * kRadiansPerDegree;
-    return m;
+    t.x -= g.yaw * kRadiansPerDegree;
+    t.y += g.pitch * kRadiansPerDegree;
+    return t;
 }
 
-// port 0's player controller, from its last look; aiming, its turn goes to the look rather than the stick
-uint32_t g_player = 0;
-bool g_turns_look = false;
+Turn TakeTurn() {
+    Turn t = g_turn;
+    g_turn = {};
+    return t;
+}
 
 bool Aiming(uint32_t player) {
     uint32_t aim = R32(player + kAimState);
@@ -116,15 +121,17 @@ float ReadFloat(uint32_t va) { return GF(va); }
 
 void WriteFloat(uint32_t va, float f) { std::memcpy(HostPtr(va), &f, 4); }
 
-// radians a frame the look turns for a full stick
-float LookRate(uint32_t player, bool aiming) {
-    float most = ReadFloat(aiming ? kAimRateMost : kLookRateMost);
-    float base = ReadFloat(aiming ? kAimRateBase : kLookRateBase);
+void AddFloat(uint32_t va, float f) { WriteFloat(va, ReadFloat(va) + f); }
+
+// radians a frame the aim turns for a full stick
+float AimRate(uint32_t player) {
+    float most = ReadFloat(kAimRateMost);
+    float base = ReadFloat(kAimRateBase);
     float boost = ReadFloat(player + kLookBoost) * ReadFloat(kBoostScale) * ReadFloat(kBoostScaleFine);
     return (most - base) * boost + base;
 }
 
-// the heading the look turns while the player stands, as the game's own aim turn does; 0 for none
+// the heading the aim turns while the player stands, as the game's own aim turn does; 0 for none
 uint32_t TurnableHeading(uint32_t player) {
     uint32_t parts = R32(player + kPlayerParts);
     uint32_t mover = parts ? R32(parts + kPartsMover) : 0;
@@ -146,18 +153,18 @@ void TurnHeading(uint32_t heading, float angle) {
     }
 }
 
-// the aim's stick: the controller's share by the aim sensitivities, then the turn as the stick the look's rate makes
+// the aim's stick: the controller's share by the aim sensitivities, then the turn as the stick the aim's rate makes
 // it: the yaw turns the heading when there is one, else the aim
-void AddTurn(uint32_t player, uint32_t stick) {
+void AddAimTurn(uint32_t player, uint32_t stick, Turn t) {
     const app::RdrSettings& s = app::Rdr();
     float x = ReadFloat(stick) * s.pad_aim_horizontal_sensitivity;
     float y = ReadFloat(stick + 4) * s.pad_aim_vertical_sensitivity;
-    float rate = LookRate(player, true);
-    if (g_turns_look && rate > kLeastRate) {
+    float rate = AimRate(player);
+    if (rate > kLeastRate) {
         uint32_t heading = TurnableHeading(player);
-        if (heading) TurnHeading(heading, -g_motion.turn.x);
-        else x += g_motion.turn.x / rate;
-        y += g_motion.turn.y / rate;
+        if (heading) TurnHeading(heading, -t.x);
+        else x += t.x / rate;
+        y += t.y / rate;
     }
     WriteFloat(stick, x);
     WriteFloat(stick + 4, y);
@@ -186,6 +193,51 @@ void UpdateDeadZones() {
     app::GameDeadZone() = g_left_zone.game;
 }
 
+// Out of aim the turn waits for the next tick of port 0's camera machine. The follow cameras (on foot, riding, the
+// wagon) take the yaw into their bearing and the pitch into the tilt they read; the mounted gun takes both.
+// A stick right lowers their angles: the game's yaw curve (0x14DB20) flips the stick's sign.
+struct CameraTurn {
+    uint32_t machine = 0;
+    Turn turn;
+    bool ticking = false;
+    bool ticked = false;
+    bool followed = false;
+    bool following = false;
+};
+CameraTurn g_camera;
+
+uint32_t CameraMachine(uint32_t player) {
+    uint32_t camera = R32(player + kPlayerCamera);
+    uint32_t rig = camera ? R32(camera + kCameraRig) : 0;
+    return rig ? R32(rig + kRigMachine) : 0;
+}
+
+uint32_t CameraInput(uint32_t machine, uint32_t index) {
+    uint32_t inputs = R32(machine + kMachineInputs);
+    return R32(R32(inputs + kInputArray) + 4 * index) + kInputValue;
+}
+
+// the player's update fills the inputs twice a frame, so the turn adds up until the tick
+void LatchCameraTurn(uint32_t player) {
+    g_camera.machine = CameraMachine(player);
+    Turn t = TakeTurn();
+    g_camera.turn.x += t.x;
+    g_camera.turn.y += t.y;
+}
+
+void ApplyCameraTilt() {
+    if (!g_camera.following) return;
+    AddFloat(CameraInput(g_camera.machine, kInputCameraTilt), -g_camera.turn.y);
+    g_camera.turn.y = 0.0f;
+}
+
+float TakeCameraYaw() {
+    float yaw = g_camera.turn.x;
+    g_camera.turn.x = 0.0f;
+    g_camera.followed = true;
+    return yaw;
+}
+
 }  // namespace
 
 // ioInput update: the pads, then their listeners
@@ -193,39 +245,85 @@ X86_EXTERN_FUNC(__imp__sub_00048390);
 X86_FUNC(sub_00048390) {
     input::Screen screen = CurrentScreen();
     input::SetScreen(screen);
-    bool play = screen == input::Screen::Play;
-    if (!play) g_player = 0;
-    g_motion = play ? TakeMotion() : Motion{};
-    g_turns_look = g_player && Aiming(g_player);
+    g_turn = screen == input::Screen::Play ? TakeMotion() : Turn{};
+    if (!g_camera.ticked) g_camera.turn = {};
+    g_camera.ticked = false;
     UpdateDeadZones();
     __imp__sub_00048390(ctx, base);
 }
 
-// the player's look, thiscall(player, right stick) ret 4
+// the player's look, thiscall(player, stick) ret 4; it runs before the camera's input
 X86_EXTERN_FUNC(__imp__sub_00143350);
 X86_FUNC(sub_00143350) {
     uint32_t player = ctx.ecx;
     uint32_t stick = R32(ctx.esp + 4);
     bool aiming = Aiming(player);
     if (PortZero(player)) {
-        g_player = player;
         input::SetAiming(aiming);
-        if (aiming) AddTurn(player, stick);
+        if (aiming) AddAimTurn(player, stick, TakeTurn());
     }
     __imp__sub_00143350(ctx, base);
 }
 
-// swioPad::GetJoystick thiscall(stick, out x y, mode, channels): out of aim, port 0's right stick gets this pad
-// update's mouse and gyro
-X86_EXTERN_FUNC(__imp__sub_001A98C0);
-X86_FUNC(sub_001A98C0) {
-    uint32_t pad = ctx.ecx;
-    int stick = int(R32(ctx.esp + 4));
-    uint32_t out = R32(ctx.esp + 8);
-    uint32_t channels = R32(ctx.esp + 16);
-    __imp__sub_001A98C0(ctx, base);
-    if (g_turns_look || stick != kRightStick || !(R32(pad + kPadChannels) & channels)) return;
-    if (R32(pad + kPadPort) != 0 || G<uint8_t>(pad + kPadPlayback)) return;
-    WriteFloat(out, ReadFloat(out) + g_motion.stick.x);
-    WriteFloat(out + 4, ReadFloat(out + 4) + g_motion.stick.y);
+// the duel's aim, thiscall(player): the stick turns the reticle's yaw right and its pitch up, the aim sensitivities
+// apply; it runs before the camera's input
+X86_EXTERN_FUNC(__imp__sub_00147630);
+X86_FUNC(sub_00147630) {
+    uint32_t player = ctx.ecx;
+    if (PortZero(player)) {
+        input::SetAiming(true);
+        Turn t = TakeTurn();
+        AddFloat(player + kLookYaw, t.x);
+        AddFloat(player + kLookPitch, -t.y);
+    }
+    __imp__sub_00147630(ctx, base);
+}
+
+// the camera machine's inputs from the player, thiscall(player, sticks) ret 4
+X86_EXTERN_FUNC(__imp__sub_0013FCF0);
+X86_FUNC(sub_0013FCF0) {
+    uint32_t player = ctx.ecx;
+    __imp__sub_0013FCF0(ctx, base);
+    if (PortZero(player)) LatchCameraTurn(player);
+}
+
+// the camera machine's tick, thiscall(machine, tunables) ret 4, from the rig's update; a turn its cameras leave is
+// dropped, as is one no tick came for since the last pad update
+X86_EXTERN_FUNC(__imp__sub_0029C670);
+X86_FUNC(sub_0029C670) {
+    bool port_zero = ctx.ecx && ctx.ecx == g_camera.machine;
+    g_camera.ticking = port_zero;
+    g_camera.followed = false;
+    if (port_zero) ApplyCameraTilt();
+    __imp__sub_0029C670(ctx, base);
+    g_camera.ticking = false;
+    if (!port_zero) return;
+    g_camera.ticked = true;
+    g_camera.following = g_camera.followed;
+    g_camera.turn = {};
+}
+
+// the follow camera's pivot (P_StrafePivot_SetRadius_AngleLimit 0x2A82D0) has just read its bearing, the
+// PlatformBearing DOF, onto the x87 stack; it adds the stick's swing next, then its angle limit
+void FollowCameraBearing(X86Context& ctx, uint8_t*) {
+    if (g_camera.ticking) ctx.st[ctx.top & 7] -= TakeCameraYaw();
+}
+
+// the wagon camera's pivot (P_WagonStrafePivot_SetRadius), thiscall(action, context) ret 4
+X86_EXTERN_FUNC(__imp__sub_002ACD30);
+X86_FUNC(sub_002ACD30) {
+    if (g_camera.ticking) AddFloat(ctx.ecx + kWagonSwing, -TakeCameraYaw());
+    __imp__sub_002ACD30(ctx, base);
+}
+
+// the mounted gun camera (c_gatling), thiscall(action, context) ret 4: it subtracts the stick's turn, then clamps
+X86_EXTERN_FUNC(__imp__sub_0029FDA0);
+X86_FUNC(sub_0029FDA0) {
+    if (g_camera.ticking) {
+        Turn t = g_camera.turn;
+        g_camera.turn = {};
+        AddFloat(ctx.ecx + kGatlingYaw, -t.x);
+        AddFloat(ctx.ecx + kGatlingPitch, -t.y);
+    }
+    __imp__sub_0029FDA0(ctx, base);
 }
