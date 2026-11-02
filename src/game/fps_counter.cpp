@@ -5,25 +5,14 @@
 
 #include "app/game_settings.h"
 #include "d3d/inline_shift.h"
+#include "game/font.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
+using namespace game_font;
 
 namespace {
 
-// the default font "berryliumx": a packed one by name and tag (FNT0), cdecl; a loaded one, thiscall(list, name)
-constexpr uint32_t kFontName = 0x3CFDA0;
-constexpr uint32_t kFontTag = 0x30544E46;
-constexpr uint32_t kFindPackedFont = 0x84BB0;
-constexpr uint32_t kFindLoadedFont = 0x86FD0;
-constexpr uint32_t kLoadedFonts = 0x65EA94;
-constexpr uint32_t kLineHeight = 0x1E8;  // font: its line's height in pixels
-// text layout: its defaults, fastcall(layout); its colour
-constexpr uint32_t kInitLayout = 0x565D0;
-constexpr uint32_t kLayoutSize = 0x40;
-constexpr uint32_t kLayoutColour = 0x38;
-// thiscall(font, x, y, text, scale x, scale y, layout, measure only, batch) ret 0x20
-constexpr uint32_t kDrawText = 0x54A30;
 // alpha blending on, cdecl(on); blend mode and alpha ref, cdecl(mode, ref); the current ones
 constexpr uint32_t kSetAlphaBlend = 0x182080;
 constexpr uint32_t kSetBlendMode = 0x182160;
@@ -41,13 +30,6 @@ constexpr float kSize = 12;
 constexpr float kMargin = 8;
 constexpr size_t kMaxChars = 31;
 
-uint32_t FindFont(X86Context& ctx) {
-    uint32_t font = CallGuest(ctx, kFindPackedFont, {kFontName, kFontTag});
-    if (font) return font;
-    ctx.ecx = kLoadedFonts;
-    return CallGuest(ctx, kFindLoadedFont, {kFontName});
-}
-
 void DrawText(X86Context& ctx, uint32_t font, uint32_t block, float at, float scale, uint32_t colour) {
     uint32_t layout = block;
     uint32_t text = block + kLayoutSize;
@@ -61,7 +43,7 @@ void DrawText(X86Context& ctx, uint32_t font, uint32_t block, float at, float sc
 }
 
 void DrawFpsCounter(X86Context& ctx) {
-    uint32_t font = FindFont(ctx);
+    uint32_t font = FindGameFont(ctx);
     uint32_t line = font ? R32(font + kLineHeight) : 0;
     static const uint32_t block = mem::AllocSystem(kLayoutSize + (kMaxChars + 1) * 2);
     if (!line || !block) return;

@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -650,6 +651,20 @@ const Section* Sections(size_t* count) {
 std::string Binding(size_t action) {
     std::lock_guard lock(g_bind_lock);
     return action < kCount ? Join(g_binds[action], true) : std::string();
+}
+
+std::string PromptKey(PromptButton button) {
+    if (!InPlay() && button == kPromptA) return "ENTER";
+    if (!InPlay() && button == kPromptB) return "ESC";
+    for (size_t i = 0; i < kCount; i++) {
+        if (kActions[i].button != int(button)) continue;
+        std::string keys = Binding(i);
+        std::string first = keys.substr(0, keys.find(','));
+        if (first.empty()) continue;
+        for (char& c : first) c = char(std::toupper(uint8_t(c)));
+        return first;
+    }
+    return {};
 }
 
 namespace {
