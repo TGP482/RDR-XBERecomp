@@ -1,6 +1,7 @@
 // PC prompts: the game's button icons are characters of its fonts in the text, drawn by the font's draw. While the
 // keyboard and mouse are in use each one is drawn as its key instead, "Press (R) to reload.", in every language. An
-// icon drawn alone (the prompt bar's) grows to its left, so the text after it keeps its place.
+// icon drawn alone (the prompt bar's) grows to its left, so the text after it keeps its place. The Flash movies' text
+// fields ("Press START" on the title) get the same.
 #include <algorithm>
 #include <iterator>
 #include <string>
@@ -33,6 +34,10 @@ constexpr uint32_t kMeasure = 0x56040;
 constexpr uint32_t kCentred = 1;
 constexpr uint32_t kRight = 4;
 bool g_measuring = false;  // our own measures see the game's text
+// a Flash text field's draw takes the text ActionScript set (copied into its buffer, thiscall(chunks, buffer, size)
+// ret 8, 0 when none), else its variable's or its own (in ebp); the copy's return in that draw
+constexpr uint32_t kFlashTextCopyReturn = 0x1AE7A8;
+constexpr uint32_t kFlashTextBuffer = 0x100;
 
 std::u16string ReadText(uint32_t va) {
     std::u16string s;
@@ -98,6 +103,44 @@ int32_t Width(X86Context& ctx, const DrawArgs& d, uint32_t text) {
     return int32_t(R32(out));
 }
 
+// a Flash text field's own text, UTF-8, read and written within its draw's buffer
+std::u16string ReadUtf8(uint32_t va) {
+    std::u16string s;
+    for (uint32_t i = 0; i < kFlashTextBuffer;) {
+        uint8_t c = G<uint8_t>(va + i++);
+        if (!c) break;
+        if (c < 0x80) {
+            s += char16_t(c);
+            continue;
+        }
+        int more = c >= 0xE0 ? 2 : 1;
+        uint32_t code = c & (more == 2 ? 0x0F : 0x1F);
+        for (int k = 0; k < more; k++) code = code << 6 | (G<uint8_t>(va + i++) & 0x3F);
+        s += char16_t(code);
+    }
+    return s;
+}
+
+void WriteUtf8(uint32_t va, const std::u16string& s) {
+    std::string out;
+    for (char16_t c : s) {
+        if (c < 0x80) {
+            out += char(c);
+        } else if (c < 0x800) {
+            out += char(0xC0 | c >> 6);
+            out += char(0x80 | (c & 0x3F));
+        } else {
+            out += char(0xE0 | c >> 12);
+            out += char(0x80 | (c >> 6 & 0x3F));
+            out += char(0x80 | (c & 0x3F));
+        }
+    }
+    size_t n = std::min(out.size(), size_t(kFlashTextBuffer - 1));
+    while (n && (uint8_t(out[n]) & 0xC0) == 0x80) n--;
+    for (size_t i = 0; i < n; i++) G<uint8_t>(va + uint32_t(i)) = uint8_t(out[i]);
+    G<uint8_t>(va + uint32_t(n)) = 0;
+}
+
 // how far left the key starts so it ends where the icon did
 float LeftShift(X86Context& ctx, const DrawArgs& d, uint32_t keys) {
     uint32_t align = d.layout ? R32(d.layout) & (kCentred | kRight) : 0;
@@ -127,4 +170,19 @@ X86_FUNC(sub_00054A30) {
     }
     W32(ctx.esp + 0xC, replaced);
     __imp__sub_00054A30(ctx, base);
+}
+
+// a Flash text field's copy of its ActionScript text; in a text field's draw it hands over the text shown, as keys
+X86_EXTERN_FUNC(__imp__sub_001AC360);
+X86_FUNC(sub_001AC360) {
+    bool draw = R32(ctx.esp) == kFlashTextCopyReturn;
+    uint32_t buffer = R32(ctx.esp + 4);
+    uint32_t own = ctx.ebp;
+    __imp__sub_001AC360(ctx, base);
+    if (!draw || !input::KeyboardActive()) return;
+    uint32_t text = ctx.eax ? buffer : own;
+    std::u16string keys;
+    if (!text || !WithKeys(ReadUtf8(text), keys)) return;
+    WriteUtf8(buffer, keys);
+    ctx.eax = buffer;
 }
