@@ -653,9 +653,14 @@ std::string Binding(size_t action) {
     return action < kCount ? Join(g_binds[action], true) : std::string();
 }
 
+static_assert(kPromptDpadLeft == kButtonTarget + kDpadLeft && kPromptStart == kButtonTarget + kStart);
+static_assert(kPromptMoveForward == kMoveTarget && kPromptStickUp == kStickUpTarget && kPromptWalk == kWalk);
+
 std::string PromptKey(PromptButton button) {
     if (!InPlay() && button == kPromptA) return "ENTER";
     if (!InPlay() && button == kPromptB) return "ESC";
+    // the front end's Escape backs out as B
+    if (GetScreen() == Screen::Menu && button == kPromptStart) return "ENTER";
     for (size_t i = 0; i < kCount; i++) {
         if (kActions[i].button != int(button)) continue;
         std::string keys = Binding(i);

@@ -67,10 +67,31 @@ void Bind(size_t action, int vk, int slot = 0);
 void ResetBindings();
 void LoadBindings();  // after the settings load
 int PressedKey();     // a bindable key or mouse button held now, 0 for none
-// the console buttons the game's prompts show, numbered as the actions press them
-enum PromptButton { kPromptA = 0, kPromptB = 1, kPromptX = 2, kPromptY = 3, kPromptLeftTrigger = 6, kPromptRightTrigger = 7 };
+// the console controls the game's prompts show, numbered as the actions press them
+enum PromptButton {
+    kPromptWalk = -1,
+    kPromptA = 0,
+    kPromptB = 1,
+    kPromptX = 2,
+    kPromptY = 3,
+    kPromptBlack = 4,
+    kPromptWhite = 5,
+    kPromptLeftTrigger = 6,
+    kPromptRightTrigger = 7,
+    kPromptDpadLeft = 10,
+    kPromptDpadRight = 11,
+    kPromptStart = 12,
+    kPromptLeftThumb = 14,
+    kPromptRightThumb = 15,
+    kPromptMoveForward = 16,
+    kPromptMoveBack = 17,
+    kPromptMoveLeft = 18,
+    kPromptMoveRight = 19,
+    kPromptStickUp = 20,
+    kPromptStickDown = 21,
+};
 // a prompt's key: in play the first key of the first action pressing the button, out of it Enter and Escape for A and
-// B; empty when nothing is bound
+// B and Enter for the front end's Start; empty when nothing is bound
 std::string PromptKey(PromptButton button);
 bool HostKey(KeyEvent event, int vk);  // that event's action is bound to this key and no capture wants it
 

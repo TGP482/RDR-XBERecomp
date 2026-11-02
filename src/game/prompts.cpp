@@ -6,6 +6,7 @@
 #include <string>
 
 #include "core/input.h"
+#include "game/prompt_words.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -16,11 +17,13 @@ struct PromptGlyph {
     char16_t glyph;
     input::PromptButton button;
 };
-// as the game's own text uses them: A joins, B is melee, X reloads, Y sneaks, LT keeps the guns drawn, RT fires
+// as the game's own text uses them: A joins, B is melee, X reloads, Y sneaks, LT keeps the guns drawn, RT fires;
+// the white and black ones stand where the PS2 had L2 and R2
 constexpr PromptGlyph kGlyphs[] = {
     {u'\u00BA', input::kPromptA},           {u'\u00BE', input::kPromptB},
     {u'\u00BC', input::kPromptX},           {u'\u00BD', input::kPromptY},
     {u'\u2020', input::kPromptLeftTrigger}, {u'\u2021', input::kPromptRightTrigger},
+    {u'\u2022', input::kPromptWhite},       {u'\u2023', input::kPromptBlack},
 };
 constexpr size_t kMaxChars = 1024;
 constexpr uint32_t kBuffers = 8;  // texts a frame may still hold while later ones draw
@@ -41,10 +44,11 @@ std::u16string ReadText(uint32_t va) {
     return s;
 }
 
-// the text with its icons as keys; false when it has none to change
+// the text with its controls named in words and its icons as keys; false when it has none to change
 bool WithKeys(const std::u16string& text, std::u16string& out) {
-    bool changed = false;
-    for (char16_t c : text) {
+    std::u16string words = text;
+    bool changed = WithControlKeys(words);
+    for (char16_t c : words) {
         std::string key;
         for (const PromptGlyph& g : kGlyphs) {
             if (g.glyph == c) key = input::PromptKey(g.button);
