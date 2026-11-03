@@ -685,6 +685,7 @@ void PollCapture() {
     if (vk != VK_ESCAPE) input::Bind(size_t(g_capture.load()), vk, g_capture_slot);
     g_capture = -1;
     g_capture_done = ImGui::GetFrameCount();
+    if (!MenuOpen()) input::SetBlocked(false);  // started from the game's options
 }
 
 // Drawing
@@ -957,6 +958,74 @@ void ToggleTextureReplacement() {
 
 }  // namespace
 
+static_assert(std::size(kPages) == kPanelPages);
+
+const char* PanelPageTitle(int page) { return kPages[page]; }
+
+std::vector<std::string> PanelSections(int page) {
+    std::vector<std::string> out;
+    for (const Row& r : PageRows(page)) {
+        if (r.id == RowId::Heading) out.push_back(r.label);
+    }
+    return out;
+}
+
+namespace {
+
+// the rows under the section's heading
+std::vector<Row> SectionRows(int page, size_t section) {
+    std::vector<Row> out;
+    size_t heading = 0;
+    bool inside = false;
+    for (const Row& r : PageRows(page)) {
+        if (r.id == RowId::Heading) inside = heading++ == section;
+        else if (inside) out.push_back(r);
+    }
+    return out;
+}
+
+std::string BindText(size_t action) {
+    if (g_capture == int(action)) return "PRESS A KEY";
+    std::vector<std::string> keys = KeyBoxes(action);
+    return keys[1].empty() ? keys[0] : keys[0] + ", " + keys[1];
+}
+
+}  // namespace
+
+std::vector<PanelRow> PanelRows(int page, size_t section) {
+    std::vector<PanelRow> out;
+    for (const Row& r : SectionRows(page, section)) {
+        if (r.id == RowId::Bind) out.push_back({r.label, BindText(r.action), true});
+        else if (DisplayRow(r.id)) out.push_back({r.label, DisplayText(r.id, CurrentDisplay())});
+        else out.push_back({r.label, Text(r.id, Get())});
+    }
+    return out;
+}
+
+// the display rows apply at once, there is no Apply here
+void StepPanelRow(int page, size_t section, size_t row, int step) {
+    std::vector<Row> rows = SectionRows(page, section);
+    if (row >= rows.size() || rows[row].id == RowId::Bind || Greyed(rows[row].id)) return;
+    Mode before = ShownMode(CurrentDisplay());
+    ChangeRow(rows[row].id, step);
+    if (!g_display_held) return;
+    // the resolution stops at its ends, Right never goes down
+    Mode after = ShownMode(g_held);
+    bool up = std::pair(after.width, after.height) > std::pair(before.width, before.height);
+    if (rows[row].id == RowId::Resolution && up != (step > 0)) g_display_held = false;
+    else ApplyHeld();
+}
+
+// the game's input waits with it, as under the panel
+void PressPanelRow(int page, size_t section, size_t row, int slot) {
+    std::vector<Row> rows = SectionRows(page, section);
+    if (row >= rows.size() || rows[row].id != RowId::Bind || g_capture >= 0) return;
+    g_capture_slot = slot;
+    g_capture_armed = false;
+    g_capture = int(rows[row].action);
+    input::SetBlocked(true);
+}
+
 bool MenuOpen() { return g_open.load(std::memory_order_relaxed); }
 
 bool Capturing() { return g_capture >= 0; }
@@ -977,9 +1046,8 @@ void DrawUi(double fps) {
     io.KeyRepeatRate = 0.1f;  // held arrows step ten times a second, ImGui's twenty is too fast for settings
     io.FontGlobalScale = std::max(1.0f, io.DisplaySize.y / 720.0f);
     FrameRate() = float(fps);
-    if (!MenuOpen()) return;
     PollCapture();
-    DrawPanel();
+    if (MenuOpen()) DrawPanel();
 }
 
 // The settings panel key opens and closes, Escape closes; F10 is a system key, so Windows' menu key handling is kept
