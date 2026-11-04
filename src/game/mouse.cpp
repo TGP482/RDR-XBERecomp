@@ -7,11 +7,14 @@
 // gun camera's yaw and pitch.
 // No aim assist on the mouse, nor on the controller with AIM ASSIST off: aiming finds no target to soft lock onto,
 // so nothing pulls the aim, and a soft lock the controller made is let go. Duels and Dead Eye lock their own way and
-// stay as they are.
+// stay as they are. The pitch out of aim goes into the tilt the camera reads back, which the camera's own clamp
+// limits; a scripted lock sets that clamp's low limit above its high one, and then the mouse, like the stick, tilts
+// nothing.
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <string_view>
+#include <vector>
 
 #include "app/game_settings.h"
 #include "core/gyro.h"
@@ -73,6 +76,22 @@ constexpr uint32_t kInputCameraTilt = 0x15;
 constexpr uint32_t kWagonSwing = 0x50;
 constexpr uint32_t kGatlingYaw = 0x5C;
 constexpr uint32_t kGatlingPitch = 0x60;
+// camera action +0x40 its params; param 0 of SetTilt (0x2A6E40) the tilt it holds, an expression of nodes. A node's
+// operand is a pointer then its kind, 1 a value, 2 a node; a value's float at +8
+constexpr uint32_t kActionParams = 0x40;
+constexpr uint32_t kOperandValue = 1;
+constexpr uint32_t kOperandNode = 2;
+constexpr uint32_t kValueFloat = 0x8;
+// expression nodes: the clamp (x, low, high), the per tick cache and its value; their vtables, operands within 0x20
+constexpr uint32_t kClampNode = 0x405578;
+constexpr uint32_t kClampX = 0xC;
+constexpr uint32_t kClampLow = 0x14;
+constexpr uint32_t kClampHigh = 0x1C;
+constexpr uint32_t kCacheNode = 0x403A98;
+constexpr uint32_t kCacheValue = 0x1C;
+constexpr uint32_t kNodeSize = 0x20;
+constexpr uint32_t kFirstVtable = 0x3C0000;
+constexpr uint32_t kLastVtable = 0x420000;
 
 constexpr float kRadiansPerCount = 0.0015f;
 constexpr float kRadiansPerDegree = 3.14159265f / 180.0f;
@@ -235,6 +254,9 @@ struct CameraTurn {
     bool ticked = false;
     bool followed = false;
     bool following = false;
+    // the tilt's clamp SetTilt read this tick, then the last tick's
+    uint32_t ticked_clamp = 0;
+    uint32_t clamp = 0;
 };
 CameraTurn g_camera;
 
@@ -260,9 +282,62 @@ void LatchCameraTurn(uint32_t player) {
     AddCameraTurn(TakeTurn());
 }
 
+bool ExpressionNode(uint32_t va) {
+    if (va < 0x80000000 || va >= 0x84000000) return false;
+    uint32_t vtable = R32(va);
+    return vtable >= kFirstVtable && vtable < kLastVtable;
+}
+
+bool Visit(uint32_t node, std::vector<uint32_t>& seen) {
+    if (std::find(seen.begin(), seen.end(), node) != seen.end()) return false;
+    seen.push_back(node);
+    return true;
+}
+
+bool ReadsInput(uint32_t node, uint32_t input, std::vector<uint32_t>& seen) {
+    if (node == input) return true;
+    if (!ExpressionNode(node) || !Visit(node, seen)) return false;
+    for (uint32_t at = 4; at < kNodeSize; at += 4) {
+        if (ReadsInput(R32(node + at), input, seen)) return true;
+    }
+    return false;
+}
+
+// the clamp whose x reads the input, 0 for none
+uint32_t FindClamp(uint32_t node, uint32_t input, std::vector<uint32_t>& seen) {
+    if (!ExpressionNode(node) || !Visit(node, seen)) return 0;
+    std::vector<uint32_t> inner;
+    if (R32(node) == kClampNode && ReadsInput(R32(node + kClampX), input, inner)) return node;
+    for (uint32_t at = 4; at < kNodeSize; at += 4) {
+        uint32_t clamp = FindClamp(R32(node + at), input, seen);
+        if (clamp) return clamp;
+    }
+    return 0;
+}
+
+// an operand's value as the last tick left it: a value, or a cache's
+bool OperandValue(uint32_t node, uint32_t at, float& value) {
+    uint32_t operand = R32(node + at);
+    uint32_t kind = R32(node + at + 4);
+    if (kind == kOperandValue) {
+        value = ReadFloat(operand + kValueFloat);
+        return true;
+    }
+    if (kind != kOperandNode || !ExpressionNode(operand) || R32(operand) != kCacheNode) return false;
+    value = ReadFloat(R32(operand + kCacheValue) + kValueFloat);
+    return true;
+}
+
+bool TiltLocked() {
+    float low;
+    float high;
+    uint32_t clamp = g_camera.clamp;
+    return clamp && OperandValue(clamp, kClampLow, low) && OperandValue(clamp, kClampHigh, high) && low >= high;
+}
+
 void ApplyCameraTilt() {
     if (!g_camera.following) return;
-    AddFloat(CameraInput(g_camera.machine, kInputCameraTilt), -g_camera.turn.y);
+    if (!TiltLocked()) AddFloat(CameraInput(g_camera.machine, kInputCameraTilt), -g_camera.turn.y);
     g_camera.turn.y = 0.0f;
 }
 
@@ -358,7 +433,22 @@ X86_FUNC(sub_0029C670) {
     if (!port_zero) return;
     g_camera.ticked = true;
     g_camera.following = g_camera.followed;
+    g_camera.clamp = g_camera.ticked_clamp;
+    g_camera.ticked_clamp = 0;
     g_camera.turn = {};
+}
+
+// SetTilt's update, cdecl(dofs, action): its param 0, the tilt the camera holds, clamps the tilt it reads back
+X86_EXTERN_FUNC(__imp__sub_002A6E40);
+X86_FUNC(sub_002A6E40) {
+    if (g_camera.ticking) {
+        uint32_t action = R32(ctx.esp + 8);
+        uint32_t tilt = R32(R32(R32(action + kActionParams)));
+        uint32_t input = CameraInput(g_camera.machine, kInputCameraTilt) - kInputValue;
+        std::vector<uint32_t> seen;
+        g_camera.ticked_clamp = FindClamp(tilt, input, seen);
+    }
+    __imp__sub_002A6E40(ctx, base);
 }
 
 // the follow camera's pivot (P_StrafePivot_SetRadius_AngleLimit 0x2A82D0) has just read its bearing, the
