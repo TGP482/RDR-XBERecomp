@@ -605,6 +605,18 @@ void OnRawInput(void* handle) {
 
 bool CursorShown() { return g_blocked || !InPlay() || GetForegroundWindow() != g_hwnd; }
 
+bool MenuCursorAt(float& x, float& y) {
+    POINT p;
+    RECT r;
+    if (!Active() || InPlay() || !GetCursorPos(&p) || !ScreenToClient(g_hwnd, &p) || !GetClientRect(g_hwnd, &r)) {
+        return false;
+    }
+    if (p.x < 0 || p.y < 0 || p.x >= r.right || p.y >= r.bottom) return false;
+    x = float(p.x) / float(r.right);
+    y = float(p.y) / float(r.bottom);
+    return true;
+}
+
 Screen GetScreen() { return Screen(g_screen.load()); }
 
 void SetScreen(Screen screen) {

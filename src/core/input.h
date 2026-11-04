@@ -25,6 +25,8 @@ void SetBlocked(bool blocked);  // the settings panel takes the input
 void OnRawInput(void* handle);
 // the cursor shows over menus and the settings panel, in play it is hidden and kept in the window
 bool CursorShown();
+// out of play, the cursor across and down the window from 0 to 1; false outside it, or not in the game's hands
+bool MenuCursorAt(float& x, float& y);
 
 // What the game is doing, set by the game side each pad update. In play the mouse looks and the keys press their
 // actions. Out of play the arrows and wheel, Enter and the left button, Backspace and the right button work the menus
