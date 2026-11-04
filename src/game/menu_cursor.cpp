@@ -1,9 +1,12 @@
-// The menus' cursor focuses the option under it as the D-pad would: buttons, combos and sliders, each by its row.
+// The menus' cursor focuses the option under it as the D-pad would: buttons, combos and sliders, each by its row; in
+// the Flash movies (the save popup, the shop) the button nearest it, through the player's own focus.
 // Only a move acts, so a page opens on its own selection and the keys keep theirs; a click then presses A.
 #include <algorithm>
+#include <cmath>
 #include <initializer_list>
 #include <vector>
 
+#include "app/display.h"
 #include "core/input.h"
 #include "xdk/hle.h"
 
@@ -107,6 +110,65 @@ void UpdateHover(X86Context& ctx, uint32_t page) {
     W32(page + kFocused, uint32_t(hovered));
 }
 
+// Flash player, while a movie advances: the movie, the buttons the D-pad steps through, their count, the focused
+// one's index and object; a display object's character and world x and y; a movie's width and height
+constexpr uint32_t kFlashMovie = 0x6855C0;
+constexpr uint32_t kFlashButtons = 0x685600;
+constexpr uint32_t kFlashButtonCount = 0x6855F8;
+constexpr uint32_t kFlashFocusIndex = 0x6855FC;
+constexpr uint32_t kFlashFocused = 0x6855DC;
+constexpr uint32_t kMaxFlashButtons = 32;
+constexpr uint32_t kObjectCharacter = 0x4;
+constexpr uint32_t kObjectX = 0x30;
+constexpr uint32_t kObjectY = 0x34;
+constexpr uint32_t kMovieWidth = 0x1C;
+constexpr uint32_t kMovieHeight = 0x24;
+// a button's state change, thiscall(character, object, from, to), which runs its rollOver and rollOut
+constexpr uint32_t kChangeState = 0xC;
+constexpr uint32_t kStateUp = 1;
+constexpr uint32_t kStateOver = 2;
+
+void ChangeState(X86Context& ctx, uint32_t object, uint32_t from, uint32_t to) {
+    ctx.ecx = R32(object + kObjectCharacter);
+    CallGuest(ctx, R32(R32(ctx.ecx) + kChangeState), {object, from, to});
+}
+
+// the button nearest the point, in the movie's own units, -1 for none
+int NearestButton(float x, float y) {
+    uint32_t count = std::min(R32(kFlashButtonCount), kMaxFlashButtons);
+    int nearest = -1;
+    float best = 0.0f;
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t button = R32(kFlashButtons + i * 4);
+        float d = std::hypot(G<float>(button + kObjectX) - x, G<float>(button + kObjectY) - y);
+        if (nearest < 0 || d < best) {
+            nearest = int(i);
+            best = d;
+        }
+    }
+    return nearest;
+}
+
+void UpdateFlashHover(X86Context& ctx) {
+    float x = 0.0f;
+    float y = 0.0f;
+    uint32_t movie = R32(kFlashMovie);
+    if (!movie || !input::MenuCursorAt(x, y) || !UpdateSeen(movie, x, y)) return;
+    // the movies draw narrowed to 4:3 in the middle of a wide screen
+    float share = app::Wide() ? app::NarrowShare() : 1.0f;
+    float movie_x = (0.5f + (x - 0.5f) / share) * G<float>(movie + kMovieWidth);
+    int hovered = NearestButton(movie_x, y * G<float>(movie + kMovieHeight));
+    int focused = int32_t(R32(kFlashFocusIndex));
+    if (hovered < 0 || hovered == focused) return;
+    if (focused >= 0 && uint32_t(focused) < R32(kFlashButtonCount)) {
+        ChangeState(ctx, R32(kFlashButtons + uint32_t(focused) * 4), kStateOver, kStateUp);
+    }
+    uint32_t button = R32(kFlashButtons + uint32_t(hovered) * 4);
+    ChangeState(ctx, button, kStateUp, kStateOver);
+    W32(kFlashFocusIndex, uint32_t(hovered));
+    W32(kFlashFocused, button);
+}
+
 }  // namespace
 
 // a page's update, thiscall(page, ?) ret 4, before its input
@@ -116,4 +178,12 @@ X86_FUNC(sub_0001AE90) {
     if (G<uint8_t>(page + kActive)) UpdateHover(ctx, page);
     ctx.ecx = page;
     __imp__sub_0001AE90(ctx, base);
+}
+
+// the Flash player's D-pad focus, while a movie advances: the buttons it gathers, then the move
+X86_EXTERN_FUNC(__imp__sub_001ACDA0);
+X86_FUNC(sub_001ACDA0) {
+    W32(kFlashButtonCount, 0);  // gathered only while A is up
+    __imp__sub_001ACDA0(ctx, base);
+    UpdateFlashHover(ctx);
 }
