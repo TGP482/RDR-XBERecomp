@@ -3,3 +3,6 @@
 
 // the frame's end (sub_0017D3A0) has swapped and would wait for its vertical blanks, one in play, two in cutscenes
 bool SkipVBlankWait(X86Context&, uint8_t*) { return true; }
+
+// the press start screen's frame has drawn and would sleep out the rest of a console frame (sub_00068E90)
+bool SkipPressStartSleep(X86Context&, uint8_t*) { return true; }

@@ -310,3 +310,9 @@ call = "FollowCameraBearing"
 at = 0x17D48F
 call = "SkipVBlankWait"
 on_true = 0x17D4C2
+
+# the press start screen's frame has drawn: no sleep to the console's frame length (src/game/frame_rate.cpp)
+[[hook]]
+at = 0x692F6
+call = "SkipPressStartSleep"
+on_true = 0x6933C
