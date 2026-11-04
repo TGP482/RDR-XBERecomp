@@ -51,7 +51,6 @@ Controller support through SDL3 for Xbox, PlayStation and Switch controllers, wi
 - **Skip Intro** - Skips the intro logos.
 - **Pause On Focus Loss** - Pauses the game and its sound while the window is in the background.
 - **Language** - Choose between English, French, German, Italian and Spanish, or Automatic, which follows the Windows display language. Applies after a restart.
-- **Audio Output** - Choose between Automatic, Mono, 2.0 Stereo and 5.1 Surround.
 - **Toggle HUD** - Hides the HUD with a bindable key.
 
 ### Miscellaneous

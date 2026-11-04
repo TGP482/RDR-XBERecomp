@@ -50,7 +50,7 @@ constexpr uint32_t kAudioOutputs[] = {audio::kOutputAuto, audio::kOutputMono, au
                                       audio::kOutputSurround};
 // automatic, then the game's languages
 const char* const kLanguageNames[] = {"AUTOMATIC", "ENGLISH", "FRENCH", "GERMAN", "ITALIAN", "SPANISH"};
-const char* const kAudioOutputNames[] = {"AUTOMATIC", "MONO", "2.0 STEREO", "5.1 SURROUND"};
+const char* const kAudioOutputNames[] = {"AUTOMATIC", "MONO", "STEREO", "SURROUND"};
 
 // render resolution in percent of the output
 constexpr int kRenderMin = 20;
@@ -136,7 +136,7 @@ constexpr Row kSettingsRows[] = {
     {RowId::SkipIntros, "SKIP INTROS"},
     {RowId::PauseOnFocusLoss, "PAUSE ON FOCUS LOSS"},
     {RowId::Language, "LANGUAGE"},
-    {RowId::AudioOutput, "AUDIO OUTPUT"},
+    {RowId::AudioOutput, "AUDIO MODE"},
     {RowId::Heading, "TEXTURES"},
     {RowId::TextureReplacement, "TEXTURE REPLACEMENT"},
     {RowId::TextureDumping, "TEXTURE DUMPING"},
