@@ -10,6 +10,7 @@
 #include "app/game_settings.h"
 #include "d3d/inline_shift.h"
 #include "game/boot.h"
+#include "game/load_show.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -207,11 +208,18 @@ X86_FUNC(sub_000217D0) {
     if (g_depth > 0) xdk::BeginInlineSide(0);
 }
 
-// a Flash movie's draw, thiscall(movie)
+// a Flash movie's draw, thiscall(movie); the load show's (the level's results, the shop) are whole 4:3 pictures on
+// the frame it clears black
 X86_EXTERN_FUNC(__imp__sub_000188A0);
 X86_FUNC(sub_000188A0) {
     if (game::TitleHidden()) {
         ctx.esp += 4;  // ret
+        return;
+    }
+    if (g_depth == 0 && game::InLoadShow()) {
+        xdk::BeginInlineSide(0, xdk::Fit::Whole);
+        __imp__sub_000188A0(ctx, base);
+        xdk::EndInlineSide();
         return;
     }
     BeginMiddle();

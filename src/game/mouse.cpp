@@ -19,6 +19,7 @@
 #include "app/game_settings.h"
 #include "core/gyro.h"
 #include "core/input.h"
+#include "game/load_show.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -375,6 +376,8 @@ X86_FUNC(sub_0006BAE0) {
     __imp__sub_0006BAE0(ctx, base);
     g_load_show = false;
 }
+
+bool game::InLoadShow() { return g_load_show; }
 
 // the player's look, thiscall(player, stick) ret 4, before the camera's input; aiming, the stick turns the camera
 // too, so the turn goes to both
