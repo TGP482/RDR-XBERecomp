@@ -304,3 +304,9 @@ on_true = 0x351D96
 [[hook]]
 at = 0x2A83A8
 call = "FollowCameraBearing"
+
+# the frame's end has swapped: no vertical blank wait, the host paces frames (src/game/frame_rate.cpp)
+[[hook]]
+at = 0x17D48F
+call = "SkipVBlankWait"
+on_true = 0x17D4C2
