@@ -7,6 +7,7 @@
 #include <string>
 
 #include "core/input.h"
+#include "game/font.h"
 #include "game/prompt_words.h"
 #include "xdk/hle.h"
 
@@ -28,9 +29,7 @@ constexpr PromptGlyph kGlyphs[] = {
 };
 constexpr size_t kMaxChars = 1024;
 constexpr uint32_t kBuffers = 8;  // texts a frame may still hold while later ones draw
-// a font's measure, thiscall(font, width out, height out, text, scale x, scale y, layout) ret 0x18; a layout's
-// alignment bits: 1 centred, 4 right
-constexpr uint32_t kMeasure = 0x56040;
+// a layout's alignment bits: 1 centred, 4 right
 constexpr uint32_t kCentred = 1;
 constexpr uint32_t kRight = 4;
 bool g_measuring = false;  // our own measures see the game's text
@@ -98,7 +97,7 @@ int32_t Width(X86Context& ctx, const DrawArgs& d, uint32_t text) {
     static const uint32_t out = mem::AllocSystem(8);
     ctx.ecx = d.font;
     g_measuring = true;
-    CallGuest(ctx, kMeasure, {out, out + 4, text, d.scale_x, d.scale_y, d.layout});
+    CallGuest(ctx, game_font::kMeasureText, {out, out + 4, text, d.scale_x, d.scale_y, d.layout});
     g_measuring = false;
     return int32_t(R32(out));
 }

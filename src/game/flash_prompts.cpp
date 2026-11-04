@@ -1,12 +1,15 @@
-// PC prompts in the Flash movies (title, shop, upgrades): a button there is a picture, a movie clip named for it,
-// laid over the PS2 button's picture. While the keyboard and mouse are in use both pictures are left out and the key
-// drawn in the game's font in their place, "(ENTER)", ending where the picture did, in the colour and line of the text
-// it labels when there is one, else as tall as the picture in white.
+// PC prompts in the Flash movies (title, shop, upgrades, save popup): a button there is a picture, a movie clip named
+// for it, laid over the PS2 button's picture. While the keyboard and mouse are in use both pictures are left out and
+// the key drawn in the game's font in their place, "(ENTER)", ending where the picture did, in the colour and line of
+// the text it labels when there is one, else as tall as the picture in white. A picture inside a line of text ("Press
+// A to confirm selection") is centred on instead, the line's text either side moving apart to make room for its key.
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "core/input.h"
@@ -21,12 +24,14 @@ namespace {
 struct FlashButton {
     const char* name;
     input::PromptButton button;
+    const char* parent = nullptr;  // the clip it must be in, where the name alone is not a button's
 };
 constexpr FlashButton kFlashButtons[] = {
     {"acceptMainXbox", input::kPromptA},
     {"canXbox", input::kPromptB},
     {"xButtonXbox", input::kPromptX},
     {"yButtonXbox", input::kPromptY},
+    {"xButton", input::kPromptA, "theScreens"},  // the save popup's, the PS2 cross
 };
 
 // display object: its character, world matrix (a b c d x y), world colour multiply (64 is one) and its own tint,
@@ -37,6 +42,7 @@ constexpr uint32_t kWorld = 0x20;
 constexpr uint32_t kWorldAlpha = 0x43;
 constexpr uint32_t kTintAlpha = 0x4F;
 constexpr uint32_t kFlags = 0x5C;
+constexpr uint32_t kParent = 0x60;
 constexpr uint32_t kFirstChild = 0x64;
 constexpr uint32_t kName = 0x6C;
 constexpr uint8_t kVisible = 0x20;
@@ -101,11 +107,25 @@ std::vector<FlashKey> g_keys;
 std::unordered_map<uint32_t, std::vector<Box>> g_pictures;
 const std::vector<Box>* g_covered = nullptr;
 
-const FlashButton* ButtonNamed(uint32_t name) {
-    if (!name) return nullptr;
-    const char* s = static_cast<const char*>(HostPtr(name));
+// a key inside a line of text: the line's glyphs left of its middle move left by half its extra width, the rest right
+struct Spread {
+    float y0;
+    float y1;
+    float middle;
+    float half;
+};
+std::unordered_map<uint32_t, std::vector<Spread>> g_spreads;  // each movie's, from its keys last frame
+const std::vector<Spread>* g_spread = nullptr;
+std::vector<std::pair<float, float>> g_glyph_points;  // the movie's glyph vertices this frame, as the game placed them
+
+bool Named(uint32_t object, const char* name) {
+    uint32_t s = object ? R32(object + kName) : 0;
+    return s && std::strcmp(static_cast<const char*>(HostPtr(s)), name) == 0;
+}
+
+const FlashButton* ButtonOf(uint32_t object) {
     for (const FlashButton& b : kFlashButtons) {
-        if (std::strcmp(s, b.name) == 0) return &b;
+        if (Named(object, b.name) && (!b.parent || Named(R32(object + kParent), b.parent))) return &b;
     }
     return nullptr;
 }
@@ -190,18 +210,37 @@ bool Covered(const Box& shape) {
     return false;
 }
 
-// the text the key labels lies just past its picture, across its line; the key takes its colour and glyphs' height
-void FitToText(FlashKey& key) {
+// the text the key labels lies just past its picture, across its line; the key takes its colour and, unless inside
+// a line of text, its glyphs' height
+void FitToText(FlashKey& key, bool take_height) {
     float height = key.box.y1 - key.box.y0;
     for (const FlashText& t : g_texts) {
         bool after = t.box.x1 >= key.box.x1 - height && t.box.x0 <= key.box.x1 + height * 2;
         bool level = t.box.y1 > key.box.y0 && t.box.y0 < key.box.y1;
         if (!after || !level) continue;
         key.colour = (key.colour & 0xFF000000u) | (t.colour & 0xFFFFFFu);
+        if (!take_height) return;
         key.box.y0 = t.box.y0;
         key.box.y1 = t.box.y1;
         return;
     }
+}
+
+// A picture inside a line of text: glyphs end just before it on its line. The key takes the line's glyphs' height.
+bool FitToLine(FlashKey& key) {
+    float height = key.box.y1 - key.box.y0;
+    Box line;
+    bool before = false;
+    for (auto [x, y] : g_glyph_points) {
+        bool level = y >= key.box.y0 && y <= key.box.y1;
+        if (!level || x < key.box.x0 - height * 3 || x > key.box.x1 + height * 3) continue;
+        before = before || (x <= key.box.x0 && x >= key.box.x0 - height * 2);
+        line.Add(x, y);
+    }
+    if (!before || line.Empty()) return false;
+    key.box.y0 = line.y0;
+    key.box.y1 = line.y1;
+    return true;
 }
 
 uint32_t Alpha(uint32_t object) {
@@ -209,7 +248,16 @@ uint32_t Alpha(uint32_t object) {
     return uint32_t(multiply) * G<uint8_t>(object + kTintAlpha) / 255;
 }
 
-void DrawKey(X86Context& ctx, uint32_t font, const FlashKey& key) {
+// this frame's words moved apart as the spread asks
+bool Spaced(const std::vector<Spread>& applied, const Spread& spread) {
+    return std::any_of(applied.begin(), applied.end(), [&](const Spread& a) {
+        return std::abs(a.middle - spread.middle) < 1 && std::abs(a.half - spread.half) < 1 && a.y0 == spread.y0;
+    });
+}
+
+// a key inside a line of text draws once its words have moved apart, so it never lies over them
+void DrawKey(X86Context& ctx, uint32_t font, const FlashKey& key, bool in_line, const std::vector<Spread>& applied,
+             std::vector<Spread>& spreads) {
     static const uint32_t block = mem::AllocSystem(kLayoutSize + (kMaxChars + 1) * 2);
     uint32_t layout = block;
     uint32_t text = block + kLayoutSize;
@@ -222,9 +270,22 @@ void DrawKey(X86Context& ctx, uint32_t font, const FlashKey& key) {
     W32(layout + kLayoutRight, 0);
     W32(layout + kLayoutColour, key.colour);
     float scale = (key.box.y1 - key.box.y0) / float(R32(font + kLineHeight));
-    uint32_t x = std::bit_cast<uint32_t>(key.box.x1);
-    uint32_t y = std::bit_cast<uint32_t>(key.box.y0);
     uint32_t s = std::bit_cast<uint32_t>(scale);
+    float right = key.box.x1;
+    if (in_line) {
+        static const uint32_t size = mem::AllocSystem(8);
+        ctx.ecx = font;
+        CallGuest(ctx, kMeasureText, {size, size + 4, text, s, s, 0});  // the default layout, from x 0
+        float width = float(int32_t(R32(size)));
+        float space = (key.box.y1 - key.box.y0) / 5;  // a gap between the key and the words either side
+        float half = std::max(0.0f, width + space * 2 - (key.box.x1 - key.box.x0)) / 2;
+        Spread spread{key.box.y0, key.box.y1, (key.box.x0 + key.box.x1) / 2, half};
+        spreads.push_back(spread);
+        if (!Spaced(applied, spread)) return;
+        right = (key.box.x0 + key.box.x1 + width) / 2;
+    }
+    uint32_t x = std::bit_cast<uint32_t>(right);
+    uint32_t y = std::bit_cast<uint32_t>(key.box.y0);
     ctx.ecx = font;
     CallGuest(ctx, kDrawText, {x, y, text, s, s, layout, 0, 0});
 }
@@ -260,7 +321,7 @@ X86_FUNC(sub_001AC840) {
         else g_picture->Add(Place(ctx, base, object));
         return;
     }
-    const FlashButton* button = visible && keys ? ButtonNamed(R32(object + kName)) : nullptr;
+    const FlashButton* button = visible && keys ? ButtonOf(object) : nullptr;
     std::string key = button ? input::PromptKey(button->button) : std::string();
     if (!key.empty()) {
         Box box;
@@ -284,18 +345,25 @@ X86_FUNC(sub_001AC840) {
 X86_EXTERN_FUNC(__imp__sub_001ABEC0);
 X86_FUNC(sub_001ABEC0) {
     std::vector<Box>& pictures = g_pictures[ctx.ecx];
+    std::vector<Spread>& spreads = g_spreads[ctx.ecx];
     g_covered = &pictures;
+    g_spread = &spreads;
     g_texts.clear();
+    g_glyph_points.clear();
     __imp__sub_001ABEC0(ctx, base);
     g_covered = nullptr;
+    g_spread = nullptr;
     pictures.clear();
+    std::vector<Spread> applied;
+    applied.swap(spreads);
     for (const FlashKey& key : g_keys) pictures.push_back(key.box);
     if (g_keys.empty()) return;
     uint32_t font = FindGameFont(ctx);
     if (font && R32(font + kLineHeight)) {
         for (FlashKey& key : g_keys) {
-            FitToText(key);
-            DrawKey(ctx, font, key);
+            bool in_line = FitToLine(key);
+            FitToText(key, !in_line);
+            DrawKey(ctx, font, key, in_line, applied, spreads);
         }
     }
     g_keys.clear();
@@ -335,5 +403,13 @@ X86_EXTERN_FUNC(__imp__sub_001ADFA0);
 X86_FUNC(sub_001ADFA0) {
     uint32_t vertex = R32(kTextVertex);
     __imp__sub_001ADFA0(ctx, base);
-    if (g_glyphs) g_glyphs->Add(G<float>(vertex), G<float>(vertex + 4));
+    if (!g_glyphs) return;
+    float& x = G<float>(vertex);
+    float y = G<float>(vertex + 4);
+    g_glyphs->Add(x, y);  // as the game placed it, so the keys find their texts each frame
+    g_glyph_points.push_back({x, y});
+    for (const Spread& s : *g_spread) {
+        float reach = (s.y1 - s.y0) / 4;  // glyphs of one line differ a little in height
+        if (y >= s.y0 - reach && y <= s.y1 + reach) x += x < s.middle ? -s.half : s.half;
+    }
 }

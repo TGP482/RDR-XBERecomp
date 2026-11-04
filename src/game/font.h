@@ -14,6 +14,8 @@ constexpr uint32_t kLayoutColour = 0x38;
 constexpr uint32_t kAlignRight = 4;
 // thiscall(font, x, y, text, scale x, scale y, layout, measure only, batch) ret 0x20, 640x480 pixels
 constexpr uint32_t kDrawText = 0x54A30;
+// thiscall(font, width out, height out, text, scale x, scale y, layout) ret 0x18
+constexpr uint32_t kMeasureText = 0x56040;
 
 }  // namespace game_font
 
