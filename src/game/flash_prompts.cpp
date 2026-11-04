@@ -1,6 +1,7 @@
 // PC prompts in the Flash movies (title, shop, upgrades): a button there is a picture, a movie clip named for it,
 // laid over the PS2 button's picture. While the keyboard and mouse are in use both pictures are left out and the key
-// drawn in the game's font in their place, "(ENTER)", as tall as the picture and ending where it did.
+// drawn in the game's font in their place, "(ENTER)", ending where the picture did, in the colour and line of the text
+// it labels when there is one, else as tall as the picture in white.
 #include <algorithm>
 #include <bit>
 #include <cstring>
@@ -53,6 +54,9 @@ constexpr uint32_t kRecordSize = 0x28;
 constexpr uint32_t kRecordMatrix = 0x4;
 constexpr uint32_t kRecordCharacter = 0x24;
 constexpr uint8_t kUpState = 1;
+// text: the next glyph vertex, its screen x and y first; the colour the glyphs draw in, with the object's tint
+constexpr uint32_t kTextVertex = 0x6845F8;
+constexpr uint32_t kGlyphColour = 0x684610;
 // the movie being drawn: its pixels per unit across and down
 constexpr uint32_t kScaleX = 0x6855C4;
 constexpr uint32_t kScaleY = 0x6855E8;
@@ -81,9 +85,16 @@ struct Box {
 struct FlashKey {
     Box box;
     std::string text;
-    uint32_t alpha;
+    uint32_t colour;
 };
 
+// a text's glyphs on screen
+struct FlashText {
+    Box box;
+    uint32_t colour;
+};
+std::vector<FlashText> g_texts;  // the movie's this frame
+Box* g_glyphs = nullptr;         // the text drawing
 Box* g_picture = nullptr;  // the picture being left out
 std::vector<FlashKey> g_keys;
 // each movie's pictures last frame: the shapes and buttons under them are the PS2 pictures
@@ -179,6 +190,20 @@ bool Covered(const Box& shape) {
     return false;
 }
 
+// the text the key labels lies just past its picture, across its line; the key takes its colour and glyphs' height
+void FitToText(FlashKey& key) {
+    float height = key.box.y1 - key.box.y0;
+    for (const FlashText& t : g_texts) {
+        bool after = t.box.x1 >= key.box.x1 - height && t.box.x0 <= key.box.x1 + height * 2;
+        bool level = t.box.y1 > key.box.y0 && t.box.y0 < key.box.y1;
+        if (!after || !level) continue;
+        key.colour = (key.colour & 0xFF000000u) | (t.colour & 0xFFFFFFu);
+        key.box.y0 = t.box.y0;
+        key.box.y1 = t.box.y1;
+        return;
+    }
+}
+
 uint32_t Alpha(uint32_t object) {
     int multiply = std::clamp(int(G<int8_t>(object + kWorldAlpha)) * 255 / kOne, 0, 255);
     return uint32_t(multiply) * G<uint8_t>(object + kTintAlpha) / 255;
@@ -195,7 +220,7 @@ void DrawKey(X86Context& ctx, uint32_t font, const FlashKey& key) {
     CallGuest(ctx, kInitLayout, {});
     W32(layout + kLayoutAlign, R32(layout + kLayoutAlign) | kAlignRight);
     W32(layout + kLayoutRight, 0);
-    W32(layout + kLayoutColour, key.alpha << 24 | 0xFFFFFFu);
+    W32(layout + kLayoutColour, key.colour);
     float scale = (key.box.y1 - key.box.y0) / float(R32(font + kLineHeight));
     uint32_t x = std::bit_cast<uint32_t>(key.box.x1);
     uint32_t y = std::bit_cast<uint32_t>(key.box.y0);
@@ -244,7 +269,7 @@ X86_FUNC(sub_001AC840) {
         else box.Add(Place(ctx, base, object));
         g_picture = nullptr;
         uint32_t alpha = Alpha(object);
-        if (!box.Empty() && alpha) g_keys.push_back({box, "(" + key + ")", alpha});
+        if (!box.Empty() && alpha) g_keys.push_back({box, "(" + key + ")", alpha << 24 | 0xFFFFFFu});
         return;
     }
     if (boxable && keys && g_covered && !g_covered->empty()) {
@@ -260,6 +285,7 @@ X86_EXTERN_FUNC(__imp__sub_001ABEC0);
 X86_FUNC(sub_001ABEC0) {
     std::vector<Box>& pictures = g_pictures[ctx.ecx];
     g_covered = &pictures;
+    g_texts.clear();
     __imp__sub_001ABEC0(ctx, base);
     g_covered = nullptr;
     pictures.clear();
@@ -267,7 +293,47 @@ X86_FUNC(sub_001ABEC0) {
     if (g_keys.empty()) return;
     uint32_t font = FindGameFont(ctx);
     if (font && R32(font + kLineHeight)) {
-        for (const FlashKey& key : g_keys) DrawKey(ctx, font, key);
+        for (FlashKey& key : g_keys) {
+            FitToText(key);
+            DrawKey(ctx, font, key);
+        }
     }
     g_keys.clear();
+}
+
+// a text's glyphs, drawn between the two, kept for the keys beside them
+static Box g_glyph_box;
+
+static void BeginText() {
+    g_glyph_box = {};
+    g_glyphs = g_covered ? &g_glyph_box : nullptr;
+}
+
+static void EndText() {
+    if (g_glyphs && !g_glyph_box.Empty()) g_texts.push_back({g_glyph_box, R32(kGlyphColour)});
+    g_glyphs = nullptr;
+}
+
+// a static text's draw, thiscall(text, place, state) ret 8
+X86_EXTERN_FUNC(__imp__sub_001AE2C0);
+X86_FUNC(sub_001AE2C0) {
+    BeginText();
+    __imp__sub_001AE2C0(ctx, base);
+    EndText();
+}
+
+// an edit text's draw, thiscall(text, place, state) ret 8
+X86_EXTERN_FUNC(__imp__sub_001AE680);
+X86_FUNC(sub_001AE680) {
+    BeginText();
+    __imp__sub_001AE680(ctx, base);
+    EndText();
+}
+
+// a glyph vertex, cdecl(x, y, scale), written where the vertex pointer was
+X86_EXTERN_FUNC(__imp__sub_001ADFA0);
+X86_FUNC(sub_001ADFA0) {
+    uint32_t vertex = R32(kTextVertex);
+    __imp__sub_001ADFA0(ctx, base);
+    if (g_glyphs) g_glyphs->Add(G<float>(vertex), G<float>(vertex + 4));
 }
