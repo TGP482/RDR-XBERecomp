@@ -1,7 +1,7 @@
 // Widescreen HUD: the game's 4:3 2D keeps its shape in the middle of the screen (d3d/d3d8.cpp), and each HUD element
 // goes to the side of the screen it sat on last frame, so the HUD keeps to the screen's edges. In the front end only the
-// button prompts and the Flash movies (title, shop, upgrades) narrow, in the middle; the legal screen's picture
-// narrows to 4:3 anywhere. Full screen movies follow FMV SCALE.
+// button prompts, the Flash movies (title, shop, upgrades) and the pages on a 4:3 picture (options) narrow, in the
+// middle; the legal screen's and those pages' pictures narrow over black anywhere. Full screen movies follow FMV SCALE.
 #include <cstring>
 
 #include "app/app.h"
@@ -15,6 +15,11 @@ using namespace kernel;
 namespace {
 
 constexpr uint32_t kFrontendButtonsVtable = 0x3D3500;  // swuiPageFrontendButtons, the button prompts
+// a swui page's widgets and their count; the IPU background image's vtable and texture
+constexpr uint32_t kPageWidgets = 0x40;
+constexpr uint32_t kPageWidgetCount = 0x298;
+constexpr uint32_t kImageVtable = 0x3D0E18;
+constexpr uint32_t kImageTexture = 0x114;
 constexpr float kSide = 1.0f / 3;  // clip space: an element centred past this goes to its side
 constexpr float kFullWidth = 0.98f;
 constexpr float kNarrow = 0.75f;  // 4:3 over 16:9
@@ -59,10 +64,8 @@ constexpr uint32_t kScreenHeight = 0x413C48;
 constexpr float kMovieAspect = 4.0f / 3.0f;
 constexpr float kWideAspect = 16.0f / 9.0f;
 
-// the screen black, so a 4:3 movie leaves no old frame at its sides; full width draws keep their place
-void DrawBlackScreen(X86Context& ctx) {
-    uint32_t x = R32(ctx.esp + 4);
-    uint32_t y = R32(ctx.esp + 8);
+// the screen black, so a 4:3 picture leaves no old frame at its sides; full width draws keep their place
+void DrawBlackScreen(X86Context& ctx, uint32_t x, uint32_t y) {
     CallGuest(ctx, kSetTexture, {0});
     CallGuest(ctx, kDrawRect, {x, y, x + R32(kScreenWidth), y + R32(kScreenHeight), 0, 0, 0, 0, 0xFF000000u, 0, 0, 0});
 }
@@ -105,7 +108,7 @@ void DrawMovieFilled(X86Context& ctx) {
     uint32_t x0 = x + uint32_t(screen * (1 - shown) / 2);
     uint32_t x1 = x + uint32_t(screen * (1 + shown) / 2);
     xdk::BeginInlineKeep();
-    if (shown < 1.0f) DrawBlackScreen(ctx);
+    if (shown < 1.0f) DrawBlackScreen(ctx, x, y);
     CallGuest(ctx, kSetTexture, {texture});
     CallGuest(ctx, kDrawRect, {x0, y, x1, y + R32(kScreenHeight), 0, crop, width, height - crop, 0xFFFFFFFFu, 0, 0, 0});
     CallGuest(ctx, kSetTexture, {0});
@@ -168,13 +171,39 @@ X86_FUNC(sub_00037970) {
     xdk::EndInlineKeep();
 }
 
+// a page on an IPU background, a 4:3 picture: the options pages; other pages lie over the front end's 3D desk
+static bool OnPicture(uint32_t page) {
+    for (uint32_t i = 0; i < R32(page + kPageWidgetCount); i++) {
+        uint32_t widget = R32(page + kPageWidgets + i * 4);
+        if (widget && R32(widget) == kImageVtable) return true;
+    }
+    return false;
+}
+
 // a swui page's widgets, thiscall(page)
 X86_EXTERN_FUNC(__imp__sub_00019CC0);
 X86_FUNC(sub_00019CC0) {
-    bool prompts = R32(ctx.ecx) == kFrontendButtonsVtable;
-    if (prompts) BeginMiddle();
+    bool narrow = R32(ctx.ecx) == kFrontendButtonsVtable || OnPicture(ctx.ecx);
+    if (narrow) BeginMiddle();
     __imp__sub_00019CC0(ctx, base);
-    if (prompts) EndMiddle();
+    if (narrow) EndMiddle();
+}
+
+// a page's IPU background, fastcall(image): a whole screen 4:3 picture (options_bg_10k), narrowed over black
+X86_EXTERN_FUNC(__imp__sub_000217D0);
+X86_FUNC(sub_000217D0) {
+    if (!app::Widescreen() || !R32(ctx.ecx + kImageTexture)) {
+        __imp__sub_000217D0(ctx, base);
+        return;
+    }
+    uint32_t image = ctx.ecx;
+    DrawBlackScreen(ctx, 0, 0);
+    xdk::EndInlineSide();
+    xdk::BeginInlineSide(0, xdk::Fit::Whole);
+    ctx.ecx = image;
+    __imp__sub_000217D0(ctx, base);
+    xdk::EndInlineSide();
+    if (g_depth > 0) xdk::BeginInlineSide(0);
 }
 
 // a Flash movie's draw, thiscall(movie)
@@ -216,7 +245,7 @@ X86_FUNC(sub_001F86D0) {
         return;
     }
     if (logo || app::Rdr().fmv_scale == 1) {
-        DrawBlackScreen(ctx);
+        DrawBlackScreen(ctx, R32(ctx.esp + 4), R32(ctx.esp + 8));
         xdk::BeginInlineSide(0, xdk::Fit::Whole);
         __imp__sub_001F86D0(ctx, base);
         xdk::EndInlineSide();
