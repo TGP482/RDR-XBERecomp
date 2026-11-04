@@ -1,6 +1,6 @@
 // Field of view in play: the player cameras' angle widens by the setting's tangent over the game's. Cutscenes (the
 // cinema shutters, level intros and outros), the attract loop and the theater keep the game's angle. Every view takes
-// the output's shape, where the game knows only 4:3 and 16:9.
+// the output's shape, where the game knows only 4:3 and 16:9. Grass culls by the same widened angle.
 #include <cmath>
 
 #include "app/display.h"
@@ -15,6 +15,11 @@ namespace {
 // viewport: its camera; camera: its angle in radians, across a 4:3 frame
 constexpr uint32_t kViewportCamera = 0x30;
 constexpr uint32_t kCameraFov = 0x38;
+// the views (sub_001F3640), +0 each one's camera, and the view being drawn; camera: where its angle is read from,
+// its own by default (sub_001F4F20)
+constexpr uint32_t kViews = 0x687614;
+constexpr uint32_t kView = 0x65E778;
+constexpr uint32_t kCameraFovSource = 0x68;
 // set while the shutters close for a cutscene (sub_00052450)
 constexpr uint32_t kCinema = 0x65E7F0;
 
@@ -62,5 +67,23 @@ X86_FUNC(sub_00052A70) {
     float game = fov;
     fov = 2.0f * std::atan(std::tan(game * 0.5f) * scale);
     __imp__sub_00052A70(ctx, base);
+    fov = game;
+}
+
+// a grass field's footprint in the drawn view, thiscall(field, footprint, view) ret 8: its half width is
+// tan(angle) / 2, so the angle is set for that to widen by the same scale
+X86_EXTERN_FUNC(__imp__sub_0012B6E0);
+X86_FUNC(sub_0012B6E0) {
+    uint32_t view = R32(kViews + R32(kView) * 4);
+    uint32_t camera = view ? R32(view) : 0;
+    float scale = FovScale();
+    if (!camera || scale == 1.0f || !InPlay()) {
+        __imp__sub_0012B6E0(ctx, base);
+        return;
+    }
+    float& fov = G<float>(R32(camera + kCameraFovSource));
+    float game = fov;
+    fov = std::atan(std::tan(game) * scale);
+    __imp__sub_0012B6E0(ctx, base);
     fov = game;
 }
