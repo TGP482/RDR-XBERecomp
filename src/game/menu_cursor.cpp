@@ -1,12 +1,12 @@
-// The menus' cursor focuses the option under it as the D-pad would: buttons, combos and sliders, each by its row; in
-// the Flash movies (the save popup, the shop) the button nearest it, through the player's own focus.
+// The menus' cursor focuses the option under it as the D-pad would: buttons, combos and sliders, each by its row, and
+// the save popup's Yes and No, through the selection its own script steps with Up and Down.
 // Only a move acts, so a page opens on its own selection and the keys keep theirs; a click then presses A.
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <initializer_list>
 #include <vector>
 
-#include "app/display.h"
 #include "core/input.h"
 #include "xdk/hle.h"
 
@@ -110,63 +110,75 @@ void UpdateHover(X86Context& ctx, uint32_t page) {
     W32(page + kFocused, uint32_t(hovered));
 }
 
-// Flash player, while a movie advances: the movie, the buttons the D-pad steps through, their count, the focused
-// one's index and object; a display object's character and world x and y; a movie's width and height
-constexpr uint32_t kFlashMovie = 0x6855C0;
-constexpr uint32_t kFlashButtons = 0x685600;
-constexpr uint32_t kFlashButtonCount = 0x6855F8;
-constexpr uint32_t kFlashFocusIndex = 0x6855FC;
-constexpr uint32_t kFlashFocused = 0x6855DC;
-constexpr uint32_t kMaxFlashButtons = 32;
-constexpr uint32_t kObjectCharacter = 0x4;
-constexpr uint32_t kObjectX = 0x30;
-constexpr uint32_t kObjectY = 0x34;
-constexpr uint32_t kMovieWidth = 0x1C;
+// the save popup's movie, loaded at +0x28; a movie's player, the player's root object and movie, the movie's height
+constexpr uint32_t kPopupMovie = 0x65DB48;
+constexpr uint32_t kMovieLoaded = 0x28;
+constexpr uint32_t kMoviePlayer = 0x24;
+constexpr uint32_t kPlayerRoot = 0x8;
+constexpr uint32_t kPlayerMovie = 0x4;
 constexpr uint32_t kMovieHeight = 0x24;
-// a button's state change, thiscall(character, object, from, to), which runs its rollOver and rollOut
-constexpr uint32_t kChangeState = 0xC;
-constexpr uint32_t kStateUp = 1;
-constexpr uint32_t kStateOver = 2;
+// display object: world matrix d and y, first child, next sibling, instance name
+constexpr uint32_t kWorldScaleY = 0x2C;
+constexpr uint32_t kWorldY = 0x34;
+constexpr uint32_t kFirstChild = 0x64;
+constexpr uint32_t kNextSibling = 0x68;
+constexpr uint32_t kName = 0x6C;
+// a movie's _global number as an int, thiscall(movie, name, value out) ret 8, and its set, thiscall(movie, name,
+// value) ret 8, both false when there is none
+constexpr uint32_t kGetGlobal = 0x189E0;
+constexpr uint32_t kSetGlobal = 0x18A00;
+// its script's choices, 0 Yes and 1 No: the hand's y in theScreens, selectionVPos + currentSelection * menuLineOffset
+constexpr int kPopupChoices = 2;
 
-void ChangeState(X86Context& ctx, uint32_t object, uint32_t from, uint32_t to) {
-    ctx.ecx = R32(object + kObjectCharacter);
-    CallGuest(ctx, R32(R32(ctx.ecx) + kChangeState), {object, from, to});
+uint32_t GuestString(const char* s) {
+    uint32_t va = mem::AllocSystem(uint32_t(std::strlen(s) + 1));
+    std::memcpy(HostPtr(va), s, std::strlen(s) + 1);
+    return va;
 }
 
-// the button nearest the point, in the movie's own units, -1 for none
-int NearestButton(float x, float y) {
-    uint32_t count = std::min(R32(kFlashButtonCount), kMaxFlashButtons);
-    int nearest = -1;
-    float best = 0.0f;
-    for (uint32_t i = 0; i < count; i++) {
-        uint32_t button = R32(kFlashButtons + i * 4);
-        float d = std::hypot(G<float>(button + kObjectX) - x, G<float>(button + kObjectY) - y);
-        if (nearest < 0 || d < best) {
-            nearest = int(i);
-            best = d;
-        }
+bool GetGlobal(X86Context& ctx, uint32_t movie, uint32_t name, int& value) {
+    static const uint32_t out = mem::AllocSystem(4);
+    ctx.ecx = movie;
+    bool found = CallGuest(ctx, kGetGlobal, {name, out}) & 0xFF;
+    value = int32_t(R32(out));
+    return found;
+}
+
+uint32_t ChildNamed(uint32_t parent, const char* name) {
+    for (uint32_t child = R32(parent + kFirstChild); child; child = R32(child + kNextSibling)) {
+        uint32_t s = R32(child + kName);
+        if (s && std::strcmp(static_cast<const char*>(HostPtr(s)), name) == 0) return child;
     }
-    return nearest;
+    return 0;
 }
 
-void UpdateFlashHover(X86Context& ctx) {
+void UpdatePopupHover(X86Context& ctx) {
+    static const uint32_t selection = GuestString("currentSelection");
+    static const uint32_t top = GuestString("selectionVPos");
+    static const uint32_t line = GuestString("menuLineOffset");
+    uint32_t movie = R32(kPopupMovie);
     float x = 0.0f;
     float y = 0.0f;
-    uint32_t movie = R32(kFlashMovie);
-    if (!movie || !input::MenuCursorAt(x, y) || !UpdateSeen(movie, x, y)) return;
-    // the movies draw narrowed to 4:3 in the middle of a wide screen
-    float share = app::Wide() ? app::NarrowShare() : 1.0f;
-    float movie_x = (0.5f + (x - 0.5f) / share) * G<float>(movie + kMovieWidth);
-    int hovered = NearestButton(movie_x, y * G<float>(movie + kMovieHeight));
-    int focused = int32_t(R32(kFlashFocusIndex));
-    if (hovered < 0 || hovered == focused) return;
-    if (focused >= 0 && uint32_t(focused) < R32(kFlashButtonCount)) {
-        ChangeState(ctx, R32(kFlashButtons + uint32_t(focused) * 4), kStateOver, kStateUp);
-    }
-    uint32_t button = R32(kFlashButtons + uint32_t(hovered) * 4);
-    ChangeState(ctx, button, kStateUp, kStateOver);
-    W32(kFlashFocusIndex, uint32_t(hovered));
-    W32(kFlashFocused, button);
+    if (!movie || !G<uint8_t>(movie + kMovieLoaded) || !input::MenuCursorAt(x, y) || !UpdateSeen(movie, x, y)) return;
+    uint32_t player = R32(movie + kMoviePlayer);
+    uint32_t def = player ? R32(player + kPlayerMovie) : 0;
+    uint32_t root = player ? R32(player + kPlayerRoot) : 0;
+    uint32_t screens = root ? ChildNamed(root, "theScreens") : 0;
+    if (!def || !screens) return;
+    int current = 0;
+    int first = 0;
+    int offset = 0;
+    bool found = GetGlobal(ctx, movie, selection, current) && GetGlobal(ctx, movie, top, first);
+    if (!found || !GetGlobal(ctx, movie, line, offset) || offset == 0) return;
+    // the rows in the movie, through theScreens' place
+    float scale = G<float>(screens + kWorldScaleY);
+    float row0 = float(first) * scale + G<float>(screens + kWorldY);
+    float step = float(offset) * scale;
+    float cursor = y * G<float>(def + kMovieHeight);
+    int hovered = std::clamp(int(std::lround((cursor - row0) / step)), 0, kPopupChoices - 1);
+    if (hovered == current) return;
+    ctx.ecx = movie;
+    CallGuest(ctx, kSetGlobal, {selection, uint32_t(hovered)});
 }
 
 }  // namespace
@@ -180,10 +192,11 @@ X86_FUNC(sub_0001AE90) {
     __imp__sub_0001AE90(ctx, base);
 }
 
-// the Flash player's D-pad focus, while a movie advances: the buttons it gathers, then the move
-X86_EXTERN_FUNC(__imp__sub_001ACDA0);
-X86_FUNC(sub_001ACDA0) {
-    W32(kFlashButtonCount, 0);  // gathered only while A is up
-    __imp__sub_001ACDA0(ctx, base);
-    UpdateFlashHover(ctx);
+// the popups' update, fastcall(popup): boot, load and save, each through its own
+X86_EXTERN_FUNC(__imp__sub_000193D0);
+X86_FUNC(sub_000193D0) {
+    uint32_t popup = ctx.ecx;
+    UpdatePopupHover(ctx);
+    ctx.ecx = popup;
+    __imp__sub_000193D0(ctx, base);
 }
