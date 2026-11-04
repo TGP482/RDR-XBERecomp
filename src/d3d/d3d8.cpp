@@ -369,7 +369,7 @@ HLE_STDCALL(Direct3D_CreateDevice, 6) {
     g_state = gpu::State{};
     SetFrameBuffers("CreateDevice", a[4]);
     // 60 Hz, widescreen
-    if (XDK_CDevice_DisplayFlags != xdk::kUnknown) SetDev(XDK_CDevice_DisplayFlags, 0x400000 | (app::Widescreen() ? 0x10000 : 0));
+    if (XDK_CDevice_DisplayFlags != xdk::kUnknown) SetDev(XDK_CDevice_DisplayFlags, 0x400000 | (app::Wide() ? 0x10000 : 0));
     // the miniport's hardware init leaves an identity ramp in slot 0, which GetGammaRamp reads until one is set
     if (XDK_CDevice_GammaRamps != xdk::kUnknown) {
         uint8_t* ramp = static_cast<uint8_t*>(HostPtr(kDevice + XDK_CDevice_GammaRamps));  // red, green, blue
@@ -1407,7 +1407,6 @@ constexpr uint32_t kScreenHeight = 0x413C48;
 // state machine: the current state, its +4 name
 constexpr uint32_t kCurrentState = 0x6664AC;
 constexpr uint32_t kStateName = 0x4;
-constexpr float kNarrow = 0.75f;             // 4:3 over 16:9
 constexpr float kFullWidth = 0.98f;          // a draw reaching this far to both sides is full screen
 
 // the HUD element drawing, and the span it drew
@@ -1451,7 +1450,7 @@ static bool InFrontEnd() {
 }
 
 static bool OnScreen() {
-    if (!app::Widescreen() || g_keep > 0) return false;
+    if (!app::Wide() || g_keep > 0) return false;
     if (InFrontEnd() && !g_inline.drawing) return false;
     uint32_t w;
     uint32_t h;
@@ -1482,7 +1481,7 @@ static bool InlineClipX(ClipX& cx) {
 
 // x scale of the draw's fit, the move to its side comes on top
 static float Scale() {
-    return g_inline.fit == xdk::Fit::Shift ? 1.0f : kNarrow;
+    return g_inline.fit == xdk::Fit::Shift ? 1.0f : app::NarrowShare();
 }
 
 // clip space x the element drawing reached
@@ -1511,7 +1510,7 @@ static bool NarrowInline(std::vector<uint32_t>& vertices) {
     }
     AddToSpan(x0, x1);
     if (FullWidth(x0, x1) && g_inline.fit != xdk::Fit::Whole) return false;
-    float move = float(g_inline.side) * (1 - kNarrow);
+    float move = float(g_inline.side) * (1 - app::NarrowShare());
     for (size_t i = 0; i + stride <= vertices.size(); i += stride) {
         float clip = std::bit_cast<float>(vertices[i]) * cx.scale + cx.offset;
         float narrowed = clip * Scale() + move;
@@ -1525,16 +1524,17 @@ static bool NarrowInline(std::vector<uint32_t>& vertices) {
 static void ClipNarrowed() {
     if (g_inline.fit == xdk::Fit::Shift) return;
     float w = float(R32(kScreenWidth));
-    float spare = w * (1 - kNarrow);
+    float narrow = app::NarrowShare();
+    float spare = w * (1 - narrow);
     float left = spare * (float(g_inline.side) + 1) / 2;
     uint32_t x0 = uint32_t(left);
     uint32_t y0 = 0;
-    uint32_t x1 = uint32_t(left + w * kNarrow);
+    uint32_t x1 = uint32_t(left + w * narrow);
     uint32_t y1 = R32(kScreenHeight);
     if (g_state.scissor_count) {
-        x0 = std::max(x0, uint32_t(left + float(g_state.scissors[0]) * kNarrow));
+        x0 = std::max(x0, uint32_t(left + float(g_state.scissors[0]) * narrow));
         y0 = g_state.scissors[1];
-        x1 = std::min(x1, uint32_t(left + float(g_state.scissors[2]) * kNarrow));
+        x1 = std::min(x1, uint32_t(left + float(g_state.scissors[2]) * narrow));
         y1 = g_state.scissors[3];
     }
     g_state.scissor_count = 1;
@@ -1568,7 +1568,7 @@ static void RestoreNarrowed(const NarrowedState& saved) {
 
 // through the projection: clip x becomes x * Scale() + the element's move
 static void NarrowProjection() {
-    float move = float(g_inline.side) * (1 - kNarrow);
+    float move = float(g_inline.side) * (1 - app::NarrowShare());
     float* proj = g_state.transforms[kTsProjection].data();
     for (int r = 0; r < 4; r++) proj[r * 4] = proj[r * 4] * Scale() + proj[r * 4 + 3] * move;
     ClipNarrowed();
@@ -1581,7 +1581,7 @@ static void NarrowShaderModel() {
     if (w[3] == 0) return;
     float origin = x[3] / w[3];
     AddToSpan(origin, origin);
-    float move = float(g_inline.side) * (1 - kNarrow);
+    float move = float(g_inline.side) * (1 - app::NarrowShare());
     for (int i = 0; i < 4; i++) x[i] = x[i] * Scale() + w[i] * move;
     ClipNarrowed();
 }

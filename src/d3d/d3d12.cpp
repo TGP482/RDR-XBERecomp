@@ -30,6 +30,7 @@
 #include <backends/imgui_impl_win32.h>
 
 #include "app/app.h"
+#include "app/display.h"
 #include "app/game_settings.h"
 #include "core/diag.h"
 #include "core/log.h"
@@ -3927,9 +3928,8 @@ void D3D12Backend::DrawSmaaPasses(ID3D12Resource* src, DXGI_FORMAT fmt, uint32_t
 }
 
 void D3D12Backend::BlitFrame(ID3D12Resource* src, DXGI_FORMAT fmt, DXGI_FORMAT rtv) {
-    // 16:9 when the console reports a widescreen display, else 4:3
-    bool wide = app::Widescreen();
-    float aspect = wide ? 16.0f / 9.0f : 4.0f / 3.0f;
+    // the output's own shape, 4:3 in the middle of a narrower one
+    float aspect = app::OutputAspect();
     float w = float(bb_w_);
     float h = float(bb_h_);
     float vw = std::min(w, h * aspect);

@@ -9,6 +9,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 
 #include "app/game_settings.h"
@@ -20,6 +21,7 @@ namespace app {
 namespace {
 
 constexpr DWORD kPollMs = 20;
+constexpr float kSameShape = 0.01f;  // 1280x960 and the like are 4:3
 
 HMONITOR MonitorHandle(const std::string& device) {
     struct Find {
@@ -79,6 +81,20 @@ void ShowOnMonitor() {
         SetWindowPos(hwnd, nullptr, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_NOZORDER | SWP_NOACTIVATE);
     }
     ApplyDisplay();
+}
+
+float OutputAspect() {
+    // asked per draw: the mode lookup runs only when the resolution setting changes
+    static std::atomic<uint64_t> key{~0ull};
+    static std::atomic<float> aspect{16.0f / 9.0f};
+    const Settings& s = Get();
+    uint64_t k = uint64_t(s.width) << 32 | s.height;
+    if (key.exchange(k) != k) {
+        Mode m = Output();
+        float shape = m.height ? float(m.width) / float(m.height) : 16.0f / 9.0f;
+        aspect = shape < kConsoleAspect + kSameShape ? kConsoleAspect : shape;
+    }
+    return aspect;
 }
 
 void WaitWhileUnfocused() {

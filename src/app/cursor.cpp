@@ -17,6 +17,7 @@
 
 #include "app/app.h"
 #include "app/cursor.h"
+#include "app/display.h"
 #include "core/log.h"
 
 using Microsoft::WRL::ComPtr;
@@ -162,8 +163,8 @@ void* MenuCursor() {
     RECT r;
     HWND hwnd = static_cast<HWND>(Window());
     if (!g_image || !hwnd || !GetClientRect(hwnd, &r)) return arrow;
-    // the frame is shown 16:9 or 4:3 in the middle of the window
-    float aspect = Widescreen() ? 16.0f / 9.0f : 4.0f / 3.0f;
+    // the frame is shown in the output's shape in the middle of the window
+    float aspect = OutputAspect();
     int frame_height = int(std::min(float(r.bottom), r.right / aspect));
     if (frame_height <= 0) return arrow;
     if (frame_height != g_height || !g_cursor) {

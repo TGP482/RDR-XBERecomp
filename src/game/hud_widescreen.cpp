@@ -2,9 +2,11 @@
 // goes to the side of the screen it sat on last frame, so the HUD keeps to the screen's edges. In the front end only the
 // button prompts, the Flash movies (title, shop, upgrades) and the pages on a 4:3 picture (options) narrow, in the
 // middle; the legal screen's and those pages' pictures narrow over black anywhere. Full screen movies follow FMV SCALE.
+#include <bit>
 #include <cstring>
 
 #include "app/app.h"
+#include "app/display.h"
 #include "app/game_settings.h"
 #include "d3d/inline_shift.h"
 #include "game/boot.h"
@@ -22,7 +24,6 @@ constexpr uint32_t kImageVtable = 0x3D0E18;
 constexpr uint32_t kImageTexture = 0x114;
 constexpr float kSide = 1.0f / 3;  // clip space: an element centred past this goes to its side
 constexpr float kFullWidth = 0.98f;
-constexpr float kNarrow = 0.75f;  // 4:3 over 16:9
 
 struct Element {
     int side = 0;
@@ -62,7 +63,6 @@ constexpr uint32_t kScreenWidth = 0x413C44;
 constexpr uint32_t kScreenHeight = 0x413C48;
 // a movie's frame is NTSC 4:3 whatever its pixels
 constexpr float kMovieAspect = 4.0f / 3.0f;
-constexpr float kWideAspect = 16.0f / 9.0f;
 
 // the screen black, so a 4:3 picture leaves no old frame at its sides; full width draws keep their place
 void DrawBlackScreen(X86Context& ctx, uint32_t x, uint32_t y) {
@@ -88,7 +88,7 @@ uint32_t BarRows(uint32_t height) {
     return rows * height / 480;
 }
 
-// The movie's 4:3 frame zoomed as far as its black bars allow: a picture wider than 16:9 fills the screen's width,
+// The movie's 4:3 frame zoomed as far as its black bars allow: a picture wider than the screen fills its width,
 // its rows cropped evenly; a narrower one fills its height between black pillars. Kept as placed.
 void DrawMovieFilled(X86Context& ctx) {
     uint32_t movie = ctx.ecx;
@@ -99,9 +99,10 @@ void DrawMovieFilled(X86Context& ctx) {
     uint32_t height = R32(bink + 4);
     uint32_t crop = BarRows(height);
     float picture = kMovieAspect * float(height) / float(height - 2 * crop);
+    float screen_shape = app::OutputAspect();
     float shown = 1.0f;  // share of the screen's width
-    if (picture >= kWideAspect) crop = uint32_t(float(height) * (1 - kMovieAspect / kWideAspect) / 2);
-    else shown = picture / kWideAspect;
+    if (picture >= screen_shape) crop = uint32_t(float(height) * (1 - kMovieAspect / screen_shape) / 2);
+    else shown = picture / screen_shape;
     float screen = float(R32(kScreenWidth));
     uint32_t x = R32(ctx.esp + 4);
     uint32_t y = R32(ctx.esp + 8);
@@ -192,7 +193,7 @@ X86_FUNC(sub_00019CC0) {
 // a page's IPU background, fastcall(image): a whole screen 4:3 picture (options_bg_10k), narrowed over black
 X86_EXTERN_FUNC(__imp__sub_000217D0);
 X86_FUNC(sub_000217D0) {
-    if (!app::Widescreen() || !R32(ctx.ecx + kImageTexture)) {
+    if (!app::Wide() || !R32(ctx.ecx + kImageTexture)) {
         __imp__sub_000217D0(ctx, base);
         return;
     }
@@ -240,7 +241,7 @@ X86_FUNC(sub_0005EB40) {
 X86_EXTERN_FUNC(__imp__sub_001F86D0);
 X86_FUNC(sub_001F86D0) {
     bool logo = R32(ctx.esp) == kMovieDrawReturn && R32(ctx.esp + 0xC) == kLogoLoopReturn;
-    if (!app::Widescreen()) {
+    if (!app::Wide()) {
         __imp__sub_001F86D0(ctx, base);
         return;
     }
@@ -255,6 +256,30 @@ X86_FUNC(sub_001F86D0) {
     ctx.esp += 12;  // ret 8
 }
 
+// the tutorial controller's camera, thiscall(camera, left, right, bottom, top, near, far): its making sets x from
+// minus the wide shape to a fixed 16:9, so it is set again across the output's own shape
+constexpr uint32_t kControllerCamera = 0x4C;
+constexpr uint32_t kSetOrtho = 0x185FA0;
+constexpr uint32_t kMinusOne = 0xBF800000;
+constexpr uint32_t kOne = 0x3F800000;
+constexpr uint32_t kMinusTen = 0xC1200000;
+constexpr uint32_t kTen = 0x41200000;
+
+// the tutorial controller's making, thiscall(controller)
+X86_EXTERN_FUNC(__imp__sub_001E0250);
+X86_FUNC(sub_001E0250) {
+    uint32_t controller = ctx.ecx;
+    __imp__sub_001E0250(ctx, base);
+    if (!app::Wide()) return;
+    uint32_t made = ctx.eax;
+    float shape = app::OutputAspect();
+    uint32_t left = std::bit_cast<uint32_t>(-shape);
+    uint32_t right = std::bit_cast<uint32_t>(shape);
+    ctx.ecx = R32(controller + kControllerCamera);
+    CallGuest(ctx, kSetOrtho, {left, right, kMinusOne, kOne, kMinusTen, kTen});
+    ctx.eax = made;
+}
+
 // the tutorial's controller, thiscall(controller), vtable 0x3F5850 slot 6: the game keeps its shape on 16:9 but lays
 // it out from the middle, so it moves against its side; the side comes from where it would sit on 4:3
 X86_EXTERN_FUNC(__imp__sub_001E03C0);
@@ -267,7 +292,7 @@ X86_FUNC(sub_001E03C0) {
     xdk::BeginInlineSide(controller.side, xdk::Fit::Shift);
     __imp__sub_001E03C0(ctx, base);
     xdk::ScreenSpan span = xdk::EndInlineSide();
-    span.x0 /= kNarrow;
-    span.x1 /= kNarrow;
+    span.x0 /= app::NarrowShare();
+    span.x1 /= app::NarrowShare();
     if (span.drawn) controller.side = SideOf(span);
 }

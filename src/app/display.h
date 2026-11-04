@@ -22,4 +22,11 @@ void ShowOnMonitor();
 // stopped
 void WaitWhileUnfocused();
 
+// the output's shape, width over height: the resolution's, 4:3 at the least
+constexpr float kConsoleAspect = 4.0f / 3.0f;
+float OutputAspect();
+inline bool Wide() { return OutputAspect() > kConsoleAspect; }
+// a 4:3 picture's share of the output's width, 0.75 on 16:9
+inline float NarrowShare() { return kConsoleAspect / OutputAspect(); }
+
 }  // namespace app
