@@ -141,13 +141,23 @@ HUD_ELEMENT(sub_001D5000)
 HUD_ELEMENT(sub_001D60E0)
 HUD_ELEMENT(sub_001D75A0)
 HUD_ELEMENT(sub_001D8D60)
-HUD_ELEMENT(sub_001D9550)
 HUD_ELEMENT(sub_001D96D0)
 HUD_ELEMENT(sub_001DE080)
 HUD_ELEMENT(sub_001DEF00)
 HUD_ELEMENT(sub_001E42D0)
 HUD_ELEMENT(sub_001E54D0)
 HUD_ELEMENT(sub_001E7FB0)
+
+// a health bar and its name, cdecl(enemy, place, ...), drawn by sub_001D9550: the enemies' (bosses') and the allies'
+// each go to their own side
+X86_EXTERN_FUNC(__imp__sub_001D8F60);
+X86_FUNC(sub_001D8F60) {
+    static Element bars[2];
+    Element& bar = bars[R32(ctx.esp + 4) ? 1 : 0];
+    BeginElement(bar);
+    __imp__sub_001D8F60(ctx, base);
+    EndElement(bar);
+}
 
 // the letterbox, thiscall(hud): its bars and torn edges already span the screen, kept
 X86_EXTERN_FUNC(__imp__sub_001D7120);
