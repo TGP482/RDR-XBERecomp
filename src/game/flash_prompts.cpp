@@ -14,6 +14,7 @@
 
 #include "core/input.h"
 #include "game/font.h"
+#include "game/pc_wording.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -60,6 +61,8 @@ constexpr uint32_t kRecordSize = 0x28;
 constexpr uint32_t kRecordMatrix = 0x4;
 constexpr uint32_t kRecordCharacter = 0x24;
 constexpr uint8_t kUpState = 1;
+// static text: its commands
+constexpr uint32_t kTextCommands = 0x20;
 // text: the next glyph vertex, its screen x and y first; the colour the glyphs draw in, with the object's tint
 constexpr uint32_t kTextVertex = 0x6845F8;
 constexpr uint32_t kGlyphColour = 0x684610;
@@ -385,9 +388,13 @@ static void EndText() {
 // a static text's draw, thiscall(text, place, state) ret 8
 X86_EXTERN_FUNC(__imp__sub_001AE2C0);
 X86_FUNC(sub_001AE2C0) {
+    uint32_t text = ctx.ecx;
+    uint32_t commands = R32(text + kTextCommands);
+    if (commands) W32(text + kTextCommands, PcWordingCommands(commands));
     BeginText();
     __imp__sub_001AE2C0(ctx, base);
     EndText();
+    W32(text + kTextCommands, commands);
 }
 
 // an edit text's draw, thiscall(text, place, state) ret 8
