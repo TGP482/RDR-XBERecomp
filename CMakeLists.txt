@@ -26,8 +26,8 @@ list(FILTER XBE_HOST_SOURCES EXCLUDE REGEX "/src/game/")
 # the executable's version and product name
 list(APPEND XBE_HOST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/version.rc)
 set_source_files_properties(src/app/version.rc PROPERTIES INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/src)
-# the game builds its own Direct3D, renderer, DirectSound, audio output, input and game code window copies
-list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/(xdk/dsound|xdk/d3d8|gpu/d3d12|audio/xaudio2|core/input|app/game_code)\\.cpp$")
+# the game builds its own Direct3D, renderer, shader, DirectSound, audio output, input and game code window copies
+list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/(xdk/dsound|xdk/d3d8|gpu/d3d12|gpu/shaders|audio/xaudio2|core/input|app/game_code)\\.cpp$")
 # SDL's headers go to the input, gyro and compiler window code alone (it is linked LINK_ONLY)
 set_source_files_properties(src/core/input.cpp src/core/gyro.cpp src/app/game_code.cpp
                             PROPERTIES INCLUDE_DIRECTORIES "${sdl3_SOURCE_DIR}/include")
