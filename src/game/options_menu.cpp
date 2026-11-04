@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -30,7 +31,9 @@ constexpr const char* kOptionsPage = "mainoptions";
 constexpr int kOptionsTop = 130;
 constexpr int kOptionsStep = 36;
 constexpr int kSectionsTop = 135;
+constexpr int kSectionsBottom = 295;  // the last section's top, its text clear of the prompts
 constexpr int kSectionsStep = 30;
+constexpr float kSectionsScale = 1.195f;
 constexpr size_t kMaxLabel = 31;  // a button's label
 // a page's widgets, their count, the focused one, the pad's pressed buttons; a widget's kind, 4 a combo; a combo's
 // items, each first its text
@@ -40,12 +43,15 @@ constexpr uint32_t kFocused = 0x31C;
 constexpr uint32_t kPressed = 0x308;
 constexpr uint32_t kWidgetKind = 0x48;
 constexpr uint32_t kCombo = 4;
+constexpr uint32_t kComboLabel = 0x28;
 constexpr uint32_t kComboItems = 0x140;
 constexpr size_t kItemTextMax = 0x27;
 constexpr uint32_t kLeftArrowAlpha = 0x129C;
 constexpr uint32_t kRightArrowAlpha = 0x12AC;
 constexpr uint32_t kLeft = 0x4000;
 constexpr uint32_t kRight = 0x8000;
+constexpr uint32_t kUp = 0x1000;
+constexpr uint32_t kDown = 0x2000;
 constexpr uint32_t kConfirm = 0x1000000;
 constexpr uint32_t kButtonX = 0x4000000;
 // a section's rows: Player Options' place, spacing and font, closer and smaller past the rows that fit
@@ -54,6 +60,11 @@ constexpr int kRowsBottom = 320;
 constexpr int kRowsStep = 35;
 constexpr int kRowsFit = 20;
 constexpr float kRowsScale = 0.75f;
+// a longer section shows this many rows at a time, scrolling past its first and last
+constexpr size_t kMaxShown = 12;
+// a widget's focus(quiet) and unfocus slots
+constexpr uint32_t kFocus = 0x10;
+constexpr uint32_t kUnfocus = 0x14;
 
 std::string g_loading;  // our page the manager is making
 int g_buttons = 0;                // the Options page's buttons read
@@ -68,6 +79,7 @@ struct Prompts {
 };
 Prompts g_prompts;  // the page being read
 std::vector<uint32_t> g_arrowless;  // the key bind rows' combos, drawn without arrows
+size_t g_scroll = 0;                // the section row the first combo shows
 
 constexpr const char* kAcronyms[] = {"FPS", "HDR", "FMV", "MSAA", "SMAA", "SSAO", "GTAO", "PNG", "DDS"};
 
@@ -126,11 +138,16 @@ void AddTitle(std::vector<std::string>& lines, const std::string& title) {
 std::vector<std::string> CategoryScript(int page) {
     std::vector<std::string> lines;
     AddTitle(lines, app::PanelPageTitle(page));
-    lines.push_back("<FONT:regulatorcondensed:SCALE:1.195,1.195:CENTER>");
-    lines.push_back("<COLOR:0.702,0.702,0.702,1><COLORC:0.771,0.771,0.771,0.500>");
     std::vector<std::string> sections = app::PanelSections(page);
+    int gaps = std::max(int(sections.size()) - 1, 1);
+    int step = std::min(kSectionsStep, (kSectionsBottom - kSectionsTop) / gaps);
+    float scale = kSectionsScale * float(step) / float(kSectionsStep);
+    char font[kMaxLine + 1];
+    std::snprintf(font, sizeof(font), "<FONT:regulatorcondensed:SCALE:%.3f,%.3f:CENTER>", scale, scale);
+    lines.push_back(font);
+    lines.push_back("<COLOR:0.702,0.702,0.702,1><COLORC:0.771,0.771,0.771,0.500>");
     for (size_t s = 0; s < sections.size(); s++) {
-        int y = kSectionsTop + kSectionsStep * int(s);
+        int y = kSectionsTop + step * int(s);
         lines.push_back(Button(y, Label(sections[s]), SectionName(page, s)));
     }
     lines.push_back("<FONT:berrylium>");
@@ -153,26 +170,26 @@ void AddBindPrompts(std::vector<std::string>& lines) {
 }
 
 // a section's rows as the Player Options page's combos, the first item their value (one alone is unselectable); the
-// rows close up to fit
+// rows close up to fit, past kMaxShown they scroll
 std::vector<std::string> SectionScript(int page, size_t section) {
     std::vector<std::string> lines;
     AddTitle(lines, app::PanelSections(page)[section]);
     std::vector<app::PanelRow> rows = app::PanelRows(page, section);
-    int step = std::min(kRowsStep, (kRowsBottom - kRowsTop) / std::max(int(rows.size()) - 1, 1));
+    size_t shown = std::min(rows.size(), kMaxShown);
+    int step = std::min(kRowsStep, (kRowsBottom - kRowsTop) / std::max(int(shown) - 1, 1));
     float scale = std::min(kRowsScale, kRowsScale * float(step) / float(kRowsFit));
     char line[kMaxLine + 1];
     std::snprintf(line, sizeof(line), "<FONT:berrylium:SCALE:%.3f,%.3f>", scale, scale);
     lines.push_back(line);
     lines.push_back("<COLOR:0.699,0.699,0.699,1><COLORC:0.769,0.769,0.769,0.500>");
-    bool binds = false;
-    for (size_t r = 0; r < rows.size(); r++) {
+    for (size_t r = 0; r < shown; r++) {
         int y = kRowsTop + step * int(r);
         std::string label = InScript(Label(rows[r].label));
         std::snprintf(line, sizeof(line), "<COMBO:80,%d,0:%s:347,%d:200,%d:10>", y, label.c_str(), y + 4, step - 4);
         lines.push_back(line);
         lines.push_back("<COMBODATA:-:0><COMBODATA:-:1>");
-        binds |= rows[r].bind;
     }
+    bool binds = std::any_of(rows.begin(), rows.end(), [](const app::PanelRow& r) { return r.bind; });
     if (binds) {
         AddBindPrompts(lines);
         return lines;
@@ -256,11 +273,61 @@ void ShowValues(uint32_t page) {
     std::vector<app::PanelRow> rows = app::PanelRows(panel_page, section);
     std::vector<uint32_t> combos = Combos(page);
     g_arrowless.clear();
-    for (size_t r = 0; r < std::min(rows.size(), combos.size()); r++) {
-        std::string text = rows[r].bind ? KeysText(rows[r].value) : Label(rows[r].value);
+    for (size_t i = 0; i < combos.size() && g_scroll + i < rows.size(); i++) {
+        const app::PanelRow& row = rows[g_scroll + i];
+        std::string label = Label(row.label);
+        std::memcpy(HostPtr(combos[i] + kComboLabel), label.c_str(), label.size() + 1);
+        std::string text = row.bind ? KeysText(row.value) : Label(row.value);
         text = text.substr(0, kItemTextMax);
-        std::memcpy(HostPtr(combos[r] + kComboItems), text.c_str(), text.size() + 1);
-        if (rows[r].bind) g_arrowless.push_back(combos[r]);
+        std::memcpy(HostPtr(combos[i] + kComboItems), text.c_str(), text.size() + 1);
+        if (row.bind) g_arrowless.push_back(combos[i]);
+    }
+}
+
+// the focused widget's place among the combos, -1 for none
+int FocusedCombo(uint32_t page, const std::vector<uint32_t>& combos) {
+    uint32_t focused = R32(page + kFocused);
+    uint32_t widget = focused < R32(page + kWidgetCount) ? R32(page + kWidgets + focused * 4) : 0;
+    auto it = std::find(combos.begin(), combos.end(), widget);
+    return widget && it != combos.end() ? int(it - combos.begin()) : -1;
+}
+
+void CallSlot(X86Context& ctx, uint32_t widget, uint32_t slot, std::initializer_list<uint32_t> args) {
+    ctx.ecx = widget;
+    CallGuest(ctx, R32(R32(widget) + slot), args);
+}
+
+void UpdateFocus(X86Context& ctx, uint32_t page, uint32_t widget) {
+    uint32_t focused = R32(page + kFocused);
+    if (focused < R32(page + kWidgetCount)) CallSlot(ctx, R32(page + kWidgets + focused * 4), kUnfocus, {});
+    CallSlot(ctx, widget, kFocus, {0});
+    for (uint32_t i = 0; i < R32(page + kWidgetCount); i++) {
+        if (R32(page + kWidgets + i * 4) == widget) W32(page + kFocused, i);
+    }
+}
+
+// Up on the first combo and Down on the last scroll the rows while there are more; the page's own wrap around
+// stands only at the ends, which show the other end
+void UpdateScroll(X86Context& ctx, uint32_t page, const std::vector<uint32_t>& combos, int before, size_t rows) {
+    size_t shown = combos.size();
+    if (rows <= shown || before < 0) return;
+    uint32_t pressed = R32(page + kPressed);
+    bool first = before == 0;
+    bool last = size_t(before) == shown - 1;
+    if ((pressed & kUp) && first) {
+        if (g_scroll == 0) {
+            g_scroll = rows - shown;
+            return;
+        }
+        g_scroll--;
+        UpdateFocus(ctx, page, combos[0]);
+    } else if ((pressed & kDown) && last) {
+        if (g_scroll + shown == rows) {
+            g_scroll = 0;
+            return;
+        }
+        g_scroll++;
+        UpdateFocus(ctx, page, combos[shown - 1]);
     }
 }
 
@@ -360,6 +427,7 @@ X86_FUNC(sub_0001F140) {
     }
     ctx.ecx = page;
     CallGuest(ctx, R32(R32(page) + kLoaded), {});
+    g_scroll = 0;
     ShowValues(page);
     ctx.eax = 1;
     ctx.esp += 8;  // ret 4
@@ -369,19 +437,20 @@ X86_FUNC(sub_0001F140) {
 X86_EXTERN_FUNC(__imp__sub_00030AF0);
 X86_FUNC(sub_00030AF0) {
     uint32_t page = ctx.ecx;
-    __imp__sub_00030AF0(ctx, base);
     int panel_page = 0;
     size_t section = 0;
     if (!SectionPage(ReadName(page + kPageName), panel_page, section)) {
         g_arrowless.clear();
+        __imp__sub_00030AF0(ctx, base);
         return;
     }
     std::vector<uint32_t> combos = Combos(page);
-    uint32_t focused = R32(page + kFocused);
-    uint32_t widget = focused < R32(page + kWidgetCount) ? R32(page + kWidgets + focused * 4) : 0;
-    auto row = std::find(combos.begin(), combos.end(), widget);
-    if (widget && row != combos.end()) {
-        size_t r = size_t(row - combos.begin());
+    int before = FocusedCombo(page, combos);
+    __imp__sub_00030AF0(ctx, base);
+    UpdateScroll(ctx, page, combos, before, app::PanelRows(panel_page, section).size());
+    int focused = FocusedCombo(page, combos);
+    if (focused >= 0) {
+        size_t r = g_scroll + size_t(focused);
         uint32_t pressed = R32(page + kPressed);
         int step = ((pressed & kRight) ? 1 : 0) - ((pressed & kLeft) ? 1 : 0);
         if (step) app::StepPanelRow(panel_page, section, r, step);

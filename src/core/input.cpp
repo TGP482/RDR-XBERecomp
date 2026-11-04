@@ -147,16 +147,18 @@ constexpr int kStickDownTarget = 21;
 constexpr int kWalk = -1;
 constexpr int kHostKey = -2;
 constexpr float kStickMax = 32767.0f;
+constexpr float kWalkSpeed = 0.4f;  // of a full stick while the walk key is held
 
 struct Target {
     Action action;
     int button;
     KeyEvent event = KeyEvent::None;
+    bool riding = false;  // presses only on a horse, where the on foot actions on its button press nothing
 };
 
 // The console pad's layout: A jump and dodge, B melee, X reload, Y action, black special move and zoom, white cycles
 // weapons, the D-pad's sides step weapons, LT draws and targets, RT fires, the left thumb crouches and the right one
-// starts Dead Eye. A duel draws with the right stick: back grabs, forward draws.
+// starts Dead Eye. A duel draws with the right stick: back grabs, forward draws. On a horse A spurs and Y dismounts.
 constexpr Target kActions[] = {
     {{"move_forward", "MOVE FORWARD", "W"}, kMoveTarget},
     {{"move_back", "MOVE BACK", "S"}, kMoveTarget + 1},
@@ -165,7 +167,7 @@ constexpr Target kActions[] = {
     {{"walk", "WALK", "Alt"}, kWalk},
     {{"jump", "JUMP / DODGE", "Space"}, kAnalogA},
     {{"crouch", "CROUCH", "C"}, kButtonTarget + 6},
-    {{"action", "ACTION / SNEAK", "E"}, 3},
+    {{"action", "ACTION / SNEAK", "E,F"}, 3},
     {{"melee", "MELEE", "F"}, kAnalogB},
     {{"fire", "FIRE", "LMB"}, 7},
     {{"draw", "DRAW / TARGET", "RMB"}, kAnalogLeftTrigger},
@@ -177,6 +179,8 @@ constexpr Target kActions[] = {
     {{"previous_weapon", "PREVIOUS WEAPON", "Wheel Down"}, kButtonTarget + kDpadLeft},
     {{"duel_grab", "GRAB", "Down"}, kStickDownTarget},
     {{"duel_draw", "DRAW", "Up"}, kStickUpTarget},
+    {{"spur", "SPUR", "Space"}, kAnalogA, KeyEvent::None, true},
+    {{"dismount", "DISMOUNT", "E"}, 3, KeyEvent::None, true},
     {{"pause", "PAUSE", "Escape"}, kButtonTarget + kStart},
     {{"back", "BACK", "Backspace"}, kButtonTarget + 5},
     {{"toggle_hud", "TOGGLE HUD", ""}, kHostKey, KeyEvent::HideHud},
@@ -186,7 +190,17 @@ constexpr Target kActions[] = {
 constexpr size_t kCount = std::size(kActions);
 static_assert(kCount <= 32, "the keyboard activity mask holds an action a bit");
 
-constexpr Section kSections[] = {{0, "ON FOOT"}, {9, "WEAPONS"}, {17, "DUEL"}, {19, "GENERAL"}};
+constexpr Section kSections[] = {{0, "ON FOOT"}, {9, "WEAPONS"}, {17, "DUEL"}, {19, "RIDING"}, {21, "GENERAL"}};
+
+// on a horse an action presses when it is a riding one or no riding one shares its button
+std::atomic<bool> g_riding{false};
+
+bool Pressable(size_t action, bool riding) {
+    if (kActions[action].riding) return riding;
+    if (!riding) return true;
+    return std::none_of(std::begin(kActions), std::end(kActions),
+                        [&](const Target& t) { return t.riding && t.button == kActions[action].button; });
+}
 
 // Key names
 
@@ -429,7 +443,7 @@ void NoteKeysHeld(uint32_t keys) {
 void ApplySticks(Pad& p, const Sticks& s) {
     int x = s.move[3] - s.move[2];
     int y = s.move[0] - s.move[1];
-    float v = s.walk ? float(app::Rdr().walk_speed) / 100.0f : 1.0f;
+    float v = s.walk ? kWalkSpeed : 1.0f;
     // a diagonal keeps the stick's length
     if (x && y) v *= 0.70710678f;
     if (x) p.lx = int16_t(float(x) * v * kStickMax);
@@ -449,10 +463,11 @@ void Keyboard(Pad& p) {
     }
     UpdateMouseSettle();
     bool menu = !InPlay();
+    bool riding = g_riding && !menu;
     Sticks sticks;
     uint32_t keys = 0;
     for (size_t i = 0; i < kCount; i++) {
-        if (kActions[i].button == kHostKey) continue;
+        if (kActions[i].button == kHostKey || !Pressable(i, riding)) continue;
         bool held = ActionHeld(binds[i], menu);
         if (kActions[i].button == kAnalogLeftTrigger) held = ToggledAim(held);
         if (!held) continue;
@@ -630,6 +645,8 @@ void SetScreen(Screen screen) {
 
 void SetAiming(bool on) { g_aiming = on; }
 
+void SetRiding(bool on) { g_riding = on; }
+
 bool Aiming() { return g_aiming; }
 
 bool TakeMouse(float& dx, float& dy) {
@@ -673,8 +690,9 @@ std::string PromptKey(PromptButton button) {
     if (!InPlay() && button == kPromptB) return "ESC";
     // the front end's Escape backs out as B
     if (GetScreen() == Screen::Menu && button == kPromptStart) return "ENTER";
+    bool riding = g_riding && InPlay();
     for (size_t i = 0; i < kCount; i++) {
-        if (kActions[i].button != int(button)) continue;
+        if (kActions[i].button != int(button) || !Pressable(i, riding)) continue;
         std::string keys = Binding(i);
         std::string first = keys.substr(0, keys.find(','));
         if (first.empty()) continue;

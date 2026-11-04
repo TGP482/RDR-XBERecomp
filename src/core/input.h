@@ -37,6 +37,8 @@ Screen GetScreen();
 // aiming a weapon: the aim sensitivities apply
 void SetAiming(bool on);
 bool Aiming();
+// on a horse: the RIDING keys take the buttons they share with the on foot ones
+void SetRiding(bool on);
 // raw mouse counts since the last call, scaled by the settings, x right and y down; false when there are none
 bool TakeMouse(float& dx, float& dy);
 struct LookScale {

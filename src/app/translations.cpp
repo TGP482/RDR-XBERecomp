@@ -27,6 +27,7 @@ constexpr Entry kEntries[] = {
     {"ON FOOT", {u"À pied", u"Zu Fuß", u"A piedi", u"A pie"}},
     {"WEAPONS", {u"Armes", u"Waffen", u"Armi", u"Armas"}},
     {"DUEL", {u"Duel", u"Duell", u"Duello", u"Duelo"}},
+    {"RIDING", {u"À cheval", u"Reiten", u"A cavallo", u"A caballo"}},
 
     // RECOMP SETTINGS rows
     {"MONITOR", {u"Écran", u"Monitor", u"Monitor", u"Monitor"}},
@@ -87,7 +88,6 @@ constexpr Entry kEntries[] = {
     {"INVERT X-AXIS", {u"Inverser l'axe X", u"X-Achse umkehren", u"Inverti asse X", u"Invertir eje X"}},
     {"INVERT Y-AXIS", {u"Inverser l'axe Y", u"Y-Achse umkehren", u"Inverti asse Y", u"Invertir eje Y"}},
     {"AIM TOGGLE", {u"Visée en bascule", u"Zielen umschalten", u"Mira a interruttore", u"Apuntar alternado"}},
-    {"WALK SPEED", {u"Vitesse de marche", u"Gehgeschwindigkeit", u"Velocità camminata", u"Velocidad al caminar"}},
     {"DEADZONE", {u"Zone morte", u"Totzone", u"Zona morta", u"Zona muerta"}},
     {"VIBRATION STRENGTH", {u"Intensité des vibrations", u"Vibrationsstärke", u"Intensità vibrazione", u"Intensidad de la vibración"}},
     {"GYRO AIMING", {u"Visée gyroscopique", u"Gyro-Zielen", u"Mira giroscopica", u"Apuntado con giroscopio"}},
@@ -131,6 +131,8 @@ constexpr Entry kEntries[] = {
     {"NEXT WEAPON", {u"Arme suivante", u"Nächste Waffe", u"Arma successiva", u"Arma siguiente"}},
     {"PREVIOUS WEAPON", {u"Arme précédente", u"Vorherige Waffe", u"Arma precedente", u"Arma anterior"}},
     {"GRAB", {u"Saisir", u"Greifen", u"Afferra", u"Agarrar"}},
+    {"SPUR", {u"Éperonner", u"Sporen geben", u"Spronare", u"Espolear"}},
+    {"DISMOUNT", {u"Descendre", u"Absteigen", u"Smontare", u"Desmontar"}},
     {"DRAW", {u"Dégainer", u"Ziehen", u"Estrai", u"Desenfundar"}},
     {"PAUSE", {u"Pause", u"Pause", u"Pausa", u"Pausa"}},
     {"BACK", {u"Retour", u"Zurück", u"Indietro", u"Atrás"}},

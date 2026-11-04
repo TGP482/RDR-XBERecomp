@@ -91,7 +91,6 @@ enum class RowId {
     InvertMouseX,
     InvertMouseY,
     AimToggle,
-    WalkSpeed,
     PadAimHorizontal,
     PadAimVertical,
     InvertPadX,
@@ -152,8 +151,6 @@ constexpr Row kMouseRows[] = {
     {RowId::InvertMouseX, "INVERT X-AXIS"},
     {RowId::InvertMouseY, "INVERT Y-AXIS"},
     {RowId::AimToggle, "AIM TOGGLE"},
-    {RowId::Heading, "KEYBOARD"},
-    {RowId::WalkSpeed, "WALK SPEED"},
 };
 
 // the game has its own sensitivity, Y axis invert and vibration in its options
@@ -464,8 +461,6 @@ void Step(RowId id, int step, Settings& s) {
             StepTable(kAudioOutputs, Rdr().audio_output, step);
             audio::SetOutputMode(Rdr().audio_output);
             break;
-        // 10% to 90% in steps of 10
-        case RowId::WalkSpeed: Rdr().walk_speed = uint32_t(StepRange(int(Rdr().walk_speed), 10, 90, 10, step)); break;
         // 0.1 to 1 in steps of 0.1, from the game's own while it is kept
         case RowId::PadDeadZone: {
             float& zone = Rdr().pad_dead_zone;
@@ -541,10 +536,6 @@ std::string Text(RowId id, Settings& s) {
             return std::to_string(v) + (v == 50 ? " (DEFAULT)" : "");
         }
         case RowId::AudioOutput: return kAudioOutputNames[NearestIndex(kAudioOutputs, Rdr().audio_output)];
-        case RowId::WalkSpeed: {
-            uint32_t v = Rdr().walk_speed;
-            return std::to_string(v) + (v == 50 ? "% (DEFAULT)" : "%");
-        }
         case RowId::PadDeadZone: {
             float zone = Rdr().pad_dead_zone;
             if (zone > 0.0f) return SensitivityText(zone);
@@ -604,7 +595,6 @@ void RestoreDefaults(int page) {
         r.invert_mouse = fresh.invert_mouse;
         r.invert_mouse_x = fresh.invert_mouse_x;
         r.aim_toggle = fresh.aim_toggle;
-        r.walk_speed = fresh.walk_speed;
         input::ResetBindings();
         return;
     }
@@ -962,10 +952,29 @@ static_assert(std::size(kPages) == kPanelPages);
 
 const char* PanelPageTitle(int page) { return kPages[page]; }
 
+namespace {
+
+bool BindHeading(const std::vector<Row>& rows, size_t i) {
+    return rows[i].id == RowId::Heading && i + 1 < rows.size() && rows[i + 1].id == RowId::Bind;
+}
+
+// the game's options list the key binds as one KEYBOARD page: the first of their headings starts it, the rest none
+const char* SectionTitle(const std::vector<Row>& rows, size_t i) {
+    if (rows[i].id != RowId::Heading) return nullptr;
+    if (!BindHeading(rows, i)) return rows[i].label;
+    for (size_t j = 0; j < i; j++) {
+        if (BindHeading(rows, j)) return nullptr;
+    }
+    return "KEYBOARD";
+}
+
+}  // namespace
+
 std::vector<std::string> PanelSections(int page) {
     std::vector<std::string> out;
-    for (const Row& r : PageRows(page)) {
-        if (r.id == RowId::Heading) out.push_back(r.label);
+    std::vector<Row> rows = PageRows(page);
+    for (size_t i = 0; i < rows.size(); i++) {
+        if (const char* title = SectionTitle(rows, i)) out.push_back(title);
     }
     return out;
 }
@@ -975,11 +984,12 @@ namespace {
 // the rows under the section's heading
 std::vector<Row> SectionRows(int page, size_t section) {
     std::vector<Row> out;
+    std::vector<Row> rows = PageRows(page);
     size_t heading = 0;
     bool inside = false;
-    for (const Row& r : PageRows(page)) {
-        if (r.id == RowId::Heading) inside = heading++ == section;
-        else if (inside) out.push_back(r);
+    for (size_t i = 0; i < rows.size(); i++) {
+        if (SectionTitle(rows, i)) inside = heading++ == section;
+        else if (inside && rows[i].id != RowId::Heading) out.push_back(rows[i]);
     }
     return out;
 }

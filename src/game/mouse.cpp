@@ -25,9 +25,11 @@ constexpr uint32_t kCurrentState = 0x6664AC;
 constexpr uint32_t kStateName = 0x4;
 constexpr uint32_t kGameRunning = 0x40EA24;
 
-// player controller: its swioPad; the aim state (0 aiming, 1 not, 2 starting, 3 stopping)
+// the player's controller; its swioPad; the aim state (0 aiming, 1 not, 2 starting, 3 stopping); on a horse
+constexpr uint32_t kPlayer = 0x65EAD8;
 constexpr uint32_t kPlayerPad = 0x894;
 constexpr uint32_t kAimState = 0x600;
+constexpr uint32_t kOnHorse = 0x338;
 // player controller: the soft lock's two flags, set only when aiming soft locks a target (sub_00148D10); the game's
 // release of the player's target, thiscall(player, hud effect) ret 4
 constexpr uint32_t kSoftLockFlags = 0x6A9;
@@ -264,6 +266,8 @@ X86_EXTERN_FUNC(__imp__sub_00048390);
 X86_FUNC(sub_00048390) {
     input::Screen screen = CurrentScreen();
     input::SetScreen(screen);
+    uint32_t player = R32(kPlayer);
+    input::SetRiding(screen == input::Screen::Play && player && G<uint8_t>(player + kOnHorse));
     g_turn = screen == input::Screen::Play ? TakeMotion() : Turn{};
     if (!g_camera.ticked) g_camera.turn = {};
     g_camera.ticked = false;

@@ -35,7 +35,6 @@ struct RdrSettings {
     bool invert_mouse = false;  // the Y axis
     bool invert_mouse_x = false;
     bool aim_toggle = false;  // a tap of the draw key draws until the next tap
-    uint32_t walk_speed = 50;  // percent of a full stick while the walk key is held
     // the right stick; the game has its own sensitivity and Y axis invert
     float pad_aim_horizontal_sensitivity = 1.0f;
     float pad_aim_vertical_sensitivity = 1.0f;
