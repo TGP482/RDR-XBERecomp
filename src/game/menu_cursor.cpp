@@ -1,5 +1,6 @@
 // The menus' cursor focuses the option under it as the D-pad would: buttons, combos and sliders, each by its row, and
-// the save popup's Yes and No, through the selection its own script steps with Up and Down.
+// in the Flash menus (the save popup's Yes and No, the pre-level Start, Weapon Selection and Shop) through the
+// selection their own script steps with Up and Down.
 // Only a move acts, so a page opens on its own selection and the keys keep theirs; a click then presses A.
 #include <algorithm>
 #include <cmath>
@@ -8,6 +9,7 @@
 #include <vector>
 
 #include "core/input.h"
+#include "game/load_show.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -129,6 +131,7 @@ constexpr uint32_t kGetGlobal = 0x189E0;
 constexpr uint32_t kSetGlobal = 0x18A00;
 // its script's choices, 0 Yes and 1 No: the hand's y in theScreens, selectionVPos + currentSelection * menuLineOffset
 constexpr int kPopupChoices = 2;
+constexpr int kMaxDepth = 8;  // clips searched below a movie's root
 
 uint32_t GuestString(const char* s) {
     uint32_t va = mem::AllocSystem(uint32_t(std::strlen(s) + 1));
@@ -152,6 +155,34 @@ uint32_t ChildNamed(uint32_t parent, const char* name) {
     return 0;
 }
 
+// a clip holding a child of that name, searched from the object down
+uint32_t ParentOfChild(uint32_t object, const char* name, int depth = 0) {
+    if (ChildNamed(object, name)) return object;
+    if (depth == kMaxDepth) return 0;
+    for (uint32_t child = R32(object + kFirstChild); child; child = R32(child + kNextSibling)) {
+        if (uint32_t found = ParentOfChild(child, name, depth + 1)) return found;
+    }
+    return 0;
+}
+
+// a Flash menu's rows, at first + row * line in the clip's space
+struct MovieRows {
+    uint32_t clip;
+    int first;
+    int line;
+    int count;
+};
+
+// the row under the cursor, nearest when past the ends
+int RowUnder(uint32_t movie, const MovieRows& rows, float y) {
+    uint32_t def = R32(R32(movie + kMoviePlayer) + kPlayerMovie);
+    float scale = G<float>(rows.clip + kWorldScaleY);
+    float row0 = float(rows.first) * scale + G<float>(rows.clip + kWorldY);
+    float step = float(rows.line) * scale;
+    float cursor = y * G<float>(def + kMovieHeight);
+    return std::clamp(int(std::lround((cursor - row0) / step)), 0, rows.count - 1);
+}
+
 void UpdatePopupHover(X86Context& ctx) {
     static const uint32_t selection = GuestString("currentSelection");
     static const uint32_t top = GuestString("selectionVPos");
@@ -170,12 +201,38 @@ void UpdatePopupHover(X86Context& ctx) {
     int offset = 0;
     bool found = GetGlobal(ctx, movie, selection, current) && GetGlobal(ctx, movie, top, first);
     if (!found || !GetGlobal(ctx, movie, line, offset) || offset == 0) return;
-    // the rows in the movie, through theScreens' place
-    float scale = G<float>(screens + kWorldScaleY);
-    float row0 = float(first) * scale + G<float>(screens + kWorldY);
-    float step = float(offset) * scale;
-    float cursor = y * G<float>(def + kMovieHeight);
-    int hovered = std::clamp(int(std::lround((cursor - row0) / step)), 0, kPopupChoices - 1);
+    int hovered = RowUnder(movie, {screens, first, offset, kPopupChoices}, y);
+    if (hovered == current) return;
+    ctx.ecx = movie;
+    CallGuest(ctx, kSetGlobal, {selection, uint32_t(hovered)});
+}
+
+// The pre-level menu's choices, 0 to SelectMax, Shop gone in a bounty: its hand's y in the clip holding the slots,
+// selectionStartV + curMenSel * menuLineOffset. Only that movie sets bountyMode.
+void UpdateLevelMenuHover(X86Context& ctx, uint32_t movie) {
+    static const uint32_t bounty = GuestString("bountyMode");
+    static const uint32_t selection = GuestString("curMenSel");
+    static const uint32_t top = GuestString("selectionStartV");
+    static const uint32_t line = GuestString("menuLineOffset");
+    static const uint32_t last = GuestString("SelectMax");
+    float x = 0.0f;
+    float y = 0.0f;
+    int mode = 0;
+    if (!game::InLoadShow() || !G<uint8_t>(movie + kMovieLoaded) || !GetGlobal(ctx, movie, bounty, mode)) return;
+    if (!input::MenuCursorAt(x, y) || !UpdateSeen(movie, x, y)) return;
+    uint32_t player = R32(movie + kMoviePlayer);
+    uint32_t def = player ? R32(player + kPlayerMovie) : 0;
+    uint32_t root = player ? R32(player + kPlayerRoot) : 0;
+    uint32_t slots = root ? ParentOfChild(root, "slot0") : 0;
+    if (!def || !slots) return;
+    int current = 0;
+    int first = 0;
+    int offset = 0;
+    int max = 0;
+    bool found = GetGlobal(ctx, movie, selection, current) && GetGlobal(ctx, movie, top, first);
+    found = found && GetGlobal(ctx, movie, line, offset) && GetGlobal(ctx, movie, last, max);
+    if (!found || offset == 0 || max < 0) return;
+    int hovered = RowUnder(movie, {slots, first, offset, max + 1}, y);
     if (hovered == current) return;
     ctx.ecx = movie;
     CallGuest(ctx, kSetGlobal, {selection, uint32_t(hovered)});
@@ -199,4 +256,13 @@ X86_FUNC(sub_000193D0) {
     UpdatePopupHover(ctx);
     ctx.ecx = popup;
     __imp__sub_000193D0(ctx, base);
+}
+
+// a Flash movie's update, thiscall(movie, seconds) ret 4: its script reads the buttons
+X86_EXTERN_FUNC(__imp__sub_00018870);
+X86_FUNC(sub_00018870) {
+    uint32_t movie = ctx.ecx;
+    UpdateLevelMenuHover(ctx, movie);
+    ctx.ecx = movie;
+    __imp__sub_00018870(ctx, base);
 }
