@@ -94,6 +94,7 @@ enum class RowId {
     PadAimHorizontal,
     PadAimVertical,
     InvertPadX,
+    AimAssist,
     PadDeadZone,
     VibrationStrength,
     GyroAiming,
@@ -159,6 +160,7 @@ constexpr Row kControllerRows[] = {
     {RowId::PadAimHorizontal, "AIM HORIZONTAL SENSITIVITY"},
     {RowId::PadAimVertical, "AIM VERTICAL SENSITIVITY"},
     {RowId::InvertPadX, "INVERT X-AXIS"},
+    {RowId::AimAssist, "AIM ASSIST"},
     {RowId::PadDeadZone, "DEADZONE"},
     {RowId::VibrationStrength, "VIBRATION STRENGTH"},
     {RowId::Heading, "GYRO"},
@@ -402,6 +404,7 @@ bool* ToggleFlag(Settings& s, RowId id) {
         case RowId::InvertMouseY: return &r.invert_mouse;
         case RowId::AimToggle: return &r.aim_toggle;
         case RowId::InvertPadX: return &r.invert_pad_x;
+        case RowId::AimAssist: return &r.aim_assist;
         case RowId::GyroAiming: return &r.gyro.enabled;
         default: return nullptr;
     }
@@ -602,6 +605,7 @@ void RestoreDefaults(int page) {
         r.pad_aim_horizontal_sensitivity = fresh.pad_aim_horizontal_sensitivity;
         r.pad_aim_vertical_sensitivity = fresh.pad_aim_vertical_sensitivity;
         r.invert_pad_x = fresh.invert_pad_x;
+        r.aim_assist = fresh.aim_assist;
         r.pad_dead_zone = fresh.pad_dead_zone;
         r.vibration_strength = fresh.vibration_strength;
         r.gyro = fresh.gyro;

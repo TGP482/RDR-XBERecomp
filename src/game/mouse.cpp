@@ -4,7 +4,7 @@
 // turns by the yaw and the aim's pitch moves by the pitch, through the game's own limits. In a duel the turn moves the
 // reticle's yaw and pitch. Out of aim the camera machine's own angles turn: the follow camera's bearing and the tilt
 // it reads back from the view, the wagon camera's swing, the mounted gun camera's yaw and pitch.
-// No aim assist on the mouse: while the keyboard and mouse were used last, aiming finds no target to soft lock onto,
+// No aim assist on the mouse, nor on the controller with AIM ASSIST off: aiming finds no target to soft lock onto,
 // so nothing pulls the aim, and a soft lock the controller made is let go. Duels and Dead Eye lock their own way and
 // stay as they are.
 #include <cmath>
@@ -126,9 +126,14 @@ bool PortZero(uint32_t player) {
     return pad && R32(pad + kPadPort) == 0;
 }
 
-// lets go of a soft lock once the keyboard and mouse take over, as the targeting update does
+// the player's aim may not soft lock: the keyboard and mouse were used last, or AIM ASSIST is off
+bool NoAimAssist(uint32_t player) {
+    return !app::Rdr().aim_assist || (PortZero(player) && input::KeyboardActive());
+}
+
+// lets go of a soft lock once it may not hold, as the targeting update does
 void DropSoftLock(X86Context& ctx, uint32_t player) {
-    if (!G<uint8_t>(player + kSoftLockFlags) || !input::KeyboardActive()) return;
+    if (!G<uint8_t>(player + kSoftLockFlags) || !NoAimAssist(player)) return;
     W16(player + kSoftLockFlags, 0);
     ctx.ecx = player;
     CallGuest(ctx, kReleaseTarget, {0});
@@ -363,7 +368,7 @@ X86_FUNC(sub_0029FDA0) {
     X86_FUNC(name) {                                                         \
         uint32_t player = ctx.ecx;                                           \
         __imp__##name(ctx, base);                                            \
-        if (PortZero(player) && input::KeyboardActive()) ctx.eax = 0;        \
+        if (NoAimAssist(player)) ctx.eax = 0;                                \
     }
 
 SOFT_LOCK_SEARCH(sub_00141D50)

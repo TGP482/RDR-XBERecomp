@@ -117,6 +117,7 @@ void LoadRdr(const void* table) {
         ReadFloat(t, "pad_aim_horizontal_sensitivity", s.pad_aim_horizontal_sensitivity);
     s.pad_aim_vertical_sensitivity = ReadFloat(t, "pad_aim_vertical_sensitivity", s.pad_aim_vertical_sensitivity);
     s.invert_pad_x = t["invert_pad_x"].value_or(s.invert_pad_x);
+    s.aim_assist = t["aim_assist"].value_or(s.aim_assist);
     float zone = ReadFloat(t, "pad_dead_zone", s.pad_dead_zone);
     s.pad_dead_zone = zone > 0.0f ? std::clamp(zone, 0.1f, 1.0f) : 0.0f;
     s.vibration_strength = std::clamp(t["vibration_strength"].value_or(s.vibration_strength), 10u, 200u);
@@ -156,6 +157,7 @@ void SaveRdr(void* table) {
     t.insert("pad_aim_horizontal_sensitivity", double(s.pad_aim_horizontal_sensitivity));
     t.insert("pad_aim_vertical_sensitivity", double(s.pad_aim_vertical_sensitivity));
     t.insert("invert_pad_x", s.invert_pad_x);
+    t.insert("aim_assist", s.aim_assist);
     t.insert("pad_dead_zone", double(s.pad_dead_zone));
     t.insert("vibration_strength", int64_t(s.vibration_strength));
     SaveGyro(t, s.gyro);

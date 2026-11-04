@@ -87,6 +87,7 @@ constexpr Entry kEntries[] = {
     {"AIM VERTICAL SENSITIVITY", {u"Sensibilité verticale en visée", u"Vertikale Zielempfindlichkeit", u"Sensibilità verticale in mira", u"Sensibilidad vertical al apuntar"}},
     {"INVERT X-AXIS", {u"Inverser l'axe X", u"X-Achse umkehren", u"Inverti asse X", u"Invertir eje X"}},
     {"INVERT Y-AXIS", {u"Inverser l'axe Y", u"Y-Achse umkehren", u"Inverti asse Y", u"Invertir eje Y"}},
+    {"AIM ASSIST", {u"Aide à la visée", u"Zielhilfe", u"Mira assistita", u"Asistencia de apuntado"}},
     {"AIM TOGGLE", {u"Visée en bascule", u"Zielen umschalten", u"Mira a interruttore", u"Apuntar alternado"}},
     {"DEADZONE", {u"Zone morte", u"Totzone", u"Zona morta", u"Zona muerta"}},
     {"VIBRATION STRENGTH", {u"Intensité des vibrations", u"Vibrationsstärke", u"Intensità vibrazione", u"Intensidad de la vibración"}},
