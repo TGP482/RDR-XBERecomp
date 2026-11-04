@@ -316,3 +316,21 @@ on_true = 0x17D4C2
 at = 0x692F6
 call = "SkipPressStartSleep"
 on_true = 0x6933C
+
+# frames times the console's frame length, the screen transition's step (src/game/frame_rate.cpp)
+[[hook]]
+at = 0x10700C
+after = true
+call = "FrameStepSt0"
+
+# the console's frame length, the fade after a load's step
+[[hook]]
+at = 0x70590
+after = true
+call = "FrameStepSt0"
+
+# the console's frame length, the load show's step
+[[hook]]
+at = 0x6759F
+after = true
+call = "FrameStepEax"
