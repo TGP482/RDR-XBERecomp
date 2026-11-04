@@ -1,6 +1,6 @@
-// RECOMP SETTINGS, MOUSE AND KEYBOARD and CONTROLLER in the Options page, after Picture and Sound Options. Each opens
-// a page listing its sections (the F10 panel's headings), each section its own page. The pages are SWUI scripts the
-// recomp writes, read line by line as the game reads its own .swui files.
+// RECOMP SETTINGS, MOUSE AND KEYBOARD and CONTROLLER in the Options pages, the front end's and the pause menu's, after
+// their own. Each opens a page listing its sections (the F10 panel's headings), each section its own page. The pages
+// are SWUI scripts the recomp writes, read line by line as the game reads its own .swui files.
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -26,8 +26,12 @@ constexpr uint32_t kReadLine = 0x1E990;
 constexpr size_t kMaxLine = 255;
 // the page manager picks a page's kind by its name: ours are made as this menu page is, then read as ours
 constexpr uint32_t kMenuKindName = 0x3D2080;  // "gameoptions"
-// the Options page and its buttons' rows, ours after its own two
-constexpr const char* kOptionsPage = "mainoptions";
+// the Options pages and their own buttons, ours after those; the buttons' rows, closer when they pass the last
+struct OptionsPage {
+    const char* name;
+    int buttons;
+};
+constexpr OptionsPage kOptionsPages[] = {{"mainoptions", 2}, {"gameoptions", 3}};
 constexpr int kOptionsTop = 130;
 constexpr int kOptionsStep = 36;
 constexpr int kSectionsTop = 135;
@@ -128,7 +132,7 @@ std::string Button(int y, const std::string& label, const std::string& target) {
 
 // the stock option pages' background and title
 void AddTitle(std::vector<std::string>& lines, const std::string& title) {
-    lines.push_back("<TEXPHASE:FRONTEND1>");
+    lines.push_back("<TEXPHASE:HUD>");  // as the stock option pages, loaded in the front end and in play
     lines.push_back("<IPU_BACKGROUND:0,0,0:0,0:options_bg_10k>");
     lines.push_back("<FONT:regulatorcondensed:SCALE:2,2:CENTER>");
     lines.push_back("<COLOR:1,1,1,1><COLORC:1,1,1,1>");
@@ -227,6 +231,20 @@ bool Script(const std::string& name, std::vector<std::string>& lines) {
 }
 
 std::string ReadName(uint32_t va) { return static_cast<const char*>(HostPtr(va)); }
+
+// an Options page's own buttons, 0 for any other page
+int OwnButtons(uint32_t page) {
+    std::string name = ReadName(page + kPageName);
+    for (const OptionsPage& o : kOptionsPages) {
+        if (name == o.name) return o.buttons;
+    }
+    return 0;
+}
+
+int OptionsRow(int own, int index) {
+    int step = std::min(kOptionsStep, (kSectionsBottom - kOptionsTop) / (own + app::kPanelPages - 1));
+    return kOptionsTop + step * index;
+}
 
 uint32_t WriteLine(const std::string& line) {
     static const uint32_t buffer = mem::AllocSystem(kMaxLine + 1);
@@ -357,8 +375,8 @@ std::string WithRow(const std::string& line, int y) {
 
 }  // namespace
 
-// a line of a page's script, thiscall(page, line, length) ret 8: the Options page's own two buttons move up for ours,
-// which follow the second; a page's Back prompt moves right of its confirm's, which the PC keys widen
+// a line of a page's script, thiscall(page, line, length) ret 8: an Options page's own buttons move up for ours, which
+// follow its last; a page's Back prompt moves right of its confirm's, which the PC keys widen
 X86_EXTERN_FUNC(__imp__sub_0001E990);
 X86_FUNC(sub_0001E990) {
     uint32_t page = ctx.ecx;
@@ -371,19 +389,19 @@ X86_FUNC(sub_0001E990) {
         g_buttons = 0;
         g_prompts = {};
     }
-    bool button = line.rfind("<BUTTON:", 0) == 0 && ReadName(page + kPageName) == kOptionsPage;
-    std::string moved = button ? WithRow(line, kOptionsTop + kOptionsStep * g_buttons++) : WithPrompt(line);
+    int own = OwnButtons(page);
+    bool button = own && line.rfind("<BUTTON:", 0) == 0;
+    std::string moved = button ? WithRow(line, OptionsRow(own, g_buttons++)) : WithPrompt(line);
     if (moved != line) {
         W32(ctx.esp + 4, WriteLine(moved));
         W32(ctx.esp + 8, uint32_t(std::min(moved.size(), kMaxLine)));
     }
     __imp__sub_0001E990(ctx, base);
-    if (!button || g_buttons != 2) return;
+    if (!button || g_buttons != own) return;
     uint32_t result = ctx.eax;
     g_adding = true;
     for (int p = 0; p < app::kPanelPages; p++) {
-        int y = kOptionsTop + kOptionsStep * (g_buttons + p);
-        ReadLine(ctx, page, Button(y, Label(app::PanelPageTitle(p)), PageName(p)));
+        ReadLine(ctx, page, Button(OptionsRow(own, g_buttons + p), Label(app::PanelPageTitle(p)), PageName(p)));
     }
     g_adding = false;
     ctx.eax = result;
