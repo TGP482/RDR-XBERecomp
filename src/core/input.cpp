@@ -395,6 +395,7 @@ struct Sticks {
     int move[4] = {};  // forward, back, left, right
     int look = 0;      // the right stick, up positive
     bool walk = false;
+    bool aiming = false;  // on foot: the game moves forward and sideways by each stick axis on its own (sub_00149F40)
 };
 
 void PressTarget(int b, Pad& p, Sticks& s) {
@@ -444,8 +445,8 @@ void ApplySticks(Pad& p, const Sticks& s) {
     int x = s.move[3] - s.move[2];
     int y = s.move[0] - s.move[1];
     float v = s.walk ? kWalkSpeed : 1.0f;
-    // a diagonal keeps the stick's length
-    if (x && y) v *= 0.70710678f;
+    // a diagonal keeps the stick's length, aiming each axis stays full
+    if (x && y && !s.aiming) v *= 0.70710678f;
     if (x) p.lx = int16_t(float(x) * v * kStickMax);
     if (y) p.ly = int16_t(float(y) * v * kStickMax);
     if (s.look) p.ry = int16_t(std::clamp(s.look, -1, 1) * int(kStickMax));
@@ -465,6 +466,7 @@ void Keyboard(Pad& p) {
     bool menu = !InPlay();
     bool riding = g_riding && !menu;
     Sticks sticks;
+    sticks.aiming = g_aiming && !riding;
     uint32_t keys = 0;
     for (size_t i = 0; i < kCount; i++) {
         if (kActions[i].button == kHostKey || !Pressable(i, riding)) continue;
