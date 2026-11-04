@@ -1,12 +1,14 @@
 // The mouse, gyro and stick dead zone on the game side.
 // Each pad update the game's state machine says whether the player is in play, a menu, the pause menu or a cutscene.
 // The mouse and gyro turn the view by an angle, so a count is always the same angle. Aiming, the player's heading
-// turns by the yaw and the aim's pitch moves by the pitch, through the game's own limits. In a duel the turn moves the
-// reticle's yaw and pitch. Out of aim the camera machine's own angles turn: the follow camera's bearing and the tilt
-// it reads back from the view, the wagon camera's swing, the mounted gun camera's yaw and pitch.
+// turns by the yaw and the aim's pitch moves by the pitch, through the game's own limits. In a duel a turn down grabs
+// and one up draws, then the turn moves the reticle's yaw and pitch. Out of aim the camera machine's own angles
+// turn: the follow camera's bearing and the tilt it reads back from the view, the wagon camera's swing, the mounted
+// gun camera's yaw and pitch.
 // No aim assist on the mouse, nor on the controller with AIM ASSIST off: aiming finds no target to soft lock onto,
 // so nothing pulls the aim, and a soft lock the controller made is let go. Duels and Dead Eye lock their own way and
 // stay as they are.
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <string_view>
@@ -75,6 +77,13 @@ constexpr uint32_t kGatlingPitch = 0x60;
 constexpr float kRadiansPerCount = 0.0015f;
 constexpr float kRadiansPerDegree = 3.14159265f / 180.0f;
 constexpr float kLeastRate = 0.0001f;
+// player controller: the right stick the duel reads (sub_00096750), its y back positive; duel: its state, the
+// reticle aimed from 3 on; a mouse turn this far down or up is a full stick
+constexpr uint32_t kDuelStick = 0x5E4;
+constexpr uint32_t kStickY = 0x4;
+constexpr uint32_t kDuelState = 0x0;
+constexpr uint32_t kDuelAiming = 3;
+constexpr float kDrawFlick = 0.03f;
 
 std::string_view StateName() {
     uint32_t state = R32(kCurrentState);
@@ -311,6 +320,21 @@ X86_FUNC(sub_00147630) {
         AddFloat(player + kLookPitch, -t.y);
     }
     __imp__sub_00147630(ctx, base);
+}
+
+// the duel's stick, thiscall(duel, stick) ret 4: before the reticle the mouse's vertical turn moves the right stick,
+// down grabs the gun (back) and up draws it (forward)
+X86_EXTERN_FUNC(__imp__sub_00096750);
+X86_FUNC(sub_00096750) {
+    uint32_t stick = R32(ctx.esp + 4);
+    uint32_t player = R32(kPlayer);
+    bool drawing = R32(ctx.ecx + kDuelState) < kDuelAiming;
+    if (player && stick == player + kDuelStick && drawing && g_turn.y != 0.0f) {
+        float flick = std::clamp(g_turn.y / kDrawFlick, -1.0f, 1.0f);
+        if (std::abs(flick) > std::abs(ReadFloat(stick + kStickY))) WriteFloat(stick + kStickY, flick);
+        g_turn.y = 0.0f;
+    }
+    __imp__sub_00096750(ctx, base);
 }
 
 // the camera machine's inputs from the player, thiscall(player, sticks) ret 4
