@@ -110,7 +110,11 @@ std::string_view StateName() {
     return name ? std::string_view(static_cast<const char*>(HostPtr(name))) : std::string_view();
 }
 
+// NewLoadShow's enter runs the level's results, the save and the shop before the state machine moves to it
+bool g_load_show = false;
+
 input::Screen CurrentScreen() {
+    if (g_load_show) return input::Screen::Menu;
     std::string_view state = StateName();
     bool playing = state == "Game" || state == "Multi";
     if (playing) return G<uint8_t>(kGameRunning) ? input::Screen::Play : input::Screen::Pause;
@@ -362,6 +366,14 @@ X86_FUNC(sub_00048390) {
     g_camera.ticked = false;
     UpdateDeadZones();
     __imp__sub_00048390(ctx, base);
+}
+
+// NewLoadShow's enter, thiscall(state)
+X86_EXTERN_FUNC(__imp__sub_0006BAE0);
+X86_FUNC(sub_0006BAE0) {
+    g_load_show = true;
+    __imp__sub_0006BAE0(ctx, base);
+    g_load_show = false;
 }
 
 // the player's look, thiscall(player, stick) ret 4, before the camera's input; aiming, the stick turns the camera
