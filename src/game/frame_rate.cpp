@@ -1,6 +1,7 @@
 // The frame rate follows MAX FRAME RATE alone: the game's own waits for the console's frame are gone. The steps it
 // takes each frame as a console frame's length take the frame's real length instead, never more, so they keep the
-// console's speed at any frame rate. What counts frames runs once for each console frame gone by.
+// console's speed at any frame rate. What counts frames runs once for each console frame gone by. The game clock
+// adds up in double precision, as small steps vanish in a float clock hours in.
 #include <algorithm>
 #include <bit>
 #include <chrono>
@@ -14,6 +15,9 @@ namespace {
 // the frame counter (sub_00084100 adds one a frame); the last frame's length in seconds
 constexpr uint32_t kFrameCount = 0x666738;
 constexpr uint32_t kFrameSeconds = 0x4109CC;
+// the game clock in seconds; the scaled step the game's timer (sub_00084100) adds to it
+constexpr uint32_t kGameClock = 0x66672C;
+constexpr uint32_t kClockStep = 0x4109A8;
 // vertical blanks a console frame waits for, 0 with the novblank switch; a vertical blank's length in seconds
 constexpr uint32_t kBlanksPerFrame = 0x413C58;
 constexpr uint32_t kBlankSeconds = 0x41424C;
@@ -89,4 +93,14 @@ X86_FUNC(sub_00107A30) {
     }
     W32(kFrameCount, frames);
     W32(kFrameSeconds, seconds);
+}
+
+// the game's timer, once a frame: the step it adds to the clock goes into a double, which the float clock follows
+X86_EXTERN_FUNC(__imp__sub_00084100);
+X86_FUNC(sub_00084100) {
+    static double clock = 0;
+    if (float(clock) != GF(kGameClock)) clock = GF(kGameClock);
+    __imp__sub_00084100(ctx, base);
+    clock += GF(kClockStep);
+    W32(kGameClock, std::bit_cast<uint32_t>(float(clock)));
 }
