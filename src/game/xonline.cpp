@@ -15,6 +15,9 @@ constexpr uint32_t kBook = 1;
 constexpr uint32_t kJournal = 3;
 constexpr uint32_t kButtonX = 0x4000000;
 constexpr uint32_t kButtonY = 0x8000000;
+// pause page: its Xbox Live button; a widget's active slot, thiscall(widget, active) ret 4
+constexpr uint32_t kPauseLiveButton = 0x458;
+constexpr uint32_t kSetActive = 0x4C;
 
 }  // namespace
 
@@ -32,4 +35,18 @@ X86_FUNC(sub_00028CA0) {
     uint32_t page = kernel::R32(ctx.esp) == kFrontPressedReturn ? kernel::R32(ctx.esi + kFrontPage) : 0;
     __imp__sub_00028CA0(ctx, base);
     if (page >= kBook && page <= kJournal && (ctx.eax & kButtonY)) ctx.eax = (ctx.eax & ~kButtonY) | kButtonX;
+}
+
+// the pause page finds its buttons, thiscall(page): Xbox Live goes inactive, as the level map does without a map, so
+// the rows close up over it
+X86_EXTERN_FUNC(__imp__sub_0002FC00);
+X86_FUNC(sub_0002FC00) {
+    uint32_t page = ctx.ecx;
+    __imp__sub_0002FC00(ctx, base);
+    uint32_t live = kernel::R32(page + kPauseLiveButton);
+    if (!live) return;
+    uint32_t eax = ctx.eax;
+    ctx.ecx = live;
+    kernel::CallGuest(ctx, kernel::R32(kernel::R32(live) + kSetActive), {0});
+    ctx.eax = eax;
 }
