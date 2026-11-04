@@ -7,6 +7,7 @@
 #include "app/app.h"
 #include "app/game_settings.h"
 #include "d3d/inline_shift.h"
+#include "game/boot.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -179,6 +180,10 @@ X86_FUNC(sub_00019CC0) {
 // a Flash movie's draw, thiscall(movie)
 X86_EXTERN_FUNC(__imp__sub_000188A0);
 X86_FUNC(sub_000188A0) {
+    if (game::TitleHidden()) {
+        ctx.esp += 4;  // ret
+        return;
+    }
     BeginMiddle();
     __imp__sub_000188A0(ctx, base);
     EndMiddle();
@@ -187,6 +192,10 @@ X86_FUNC(sub_000188A0) {
 // the legal screen's picture (rdrlogoshot), 4:3, drawn over the whole screen
 X86_EXTERN_FUNC(__imp__sub_0005EB40);
 X86_FUNC(sub_0005EB40) {
+    if (game::TitleHidden()) {
+        ctx.esp += 4;  // ret
+        return;
+    }
     if (g_depth > 0) {
         __imp__sub_0005EB40(ctx, base);
         return;
