@@ -11,7 +11,8 @@ The latest version of [RDR-XBERecomp](https://github.com/TGP482/RDR-XBERecomp/re
 
 - Put your game files in the `assets` folder. This can be an ISO, or the extracted data files.
 - Run `RDR.exe`. The first start compiles the game's code for your PC, this only happens once.
-- Recomp settings can be adjusted through the Settings overlay, which is opened with F10 by default.
+- Recomp Settings can be adjusted in the in-game options menu while the game is running, or through the Settings overlay, which is opened with <kbd>F10</kbd> by default.
+<img width="1920" height="1080" alt="{2C4F2E54-4301-4843-9A69-96118CF07D00}" src="https://github.com/user-attachments/assets/88e4cb18-6560-4736-86dd-b3e03b1cd5b0" />
 
 ## Features
 ### Display
