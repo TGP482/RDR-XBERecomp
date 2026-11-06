@@ -10,6 +10,7 @@
 #include <xaudio2.h>
 
 #include <atomic>
+#include <chrono>
 #include <future>
 #include <optional>
 #include <thread>
@@ -36,6 +37,18 @@ std::atomic<bool> g_surround{false};
 std::atomic<bool> g_mono{false};
 std::atomic<uint32_t> g_mode{kOutputAuto};
 std::atomic<bool> g_mode_changed{false};
+
+// XAudio2 stops for good once its device goes (unplugged, an HDMI display changing mode)
+struct DeviceWatch : IXAudio2EngineCallback {
+    std::atomic<bool> lost{false};
+    void STDMETHODCALLTYPE OnProcessingPassStart() override {}
+    void STDMETHODCALLTYPE OnProcessingPassEnd() override {}
+    void STDMETHODCALLTYPE OnCriticalError(HRESULT) override { lost = true; }
+};
+DeviceWatch g_device;
+
+constexpr uint32_t kFrames = kRate / 100;  // 10 ms
+constexpr uint32_t kRetryBlocks = 100;     // a second between tries to open a device
 
 struct Output {
     IXAudio2* xa = nullptr;
@@ -147,19 +160,42 @@ void ApplyMatrix(Output& out) {
     LOGR("audio: %s output, %u device channels", OutputName(), outputs);
 }
 
+void Close(Output& out) {
+    if (out.voice) out.voice->DestroyVoice();
+    if (out.master) out.master->DestroyVoice();
+    if (out.xa) out.xa->Release();
+    out = Output{};
+}
+
 std::optional<Output> Open() {
+    g_device.lost = false;
     Output out;
-    if (FAILED(XAudio2Create(&out.xa, 0, XAUDIO2_DEFAULT_PROCESSOR))) return std::nullopt;
-    if (FAILED(out.xa->CreateMasteringVoice(&out.master))) return std::nullopt;
     WAVEFORMATEXTENSIBLE wf = MixFormat();
-    if (FAILED(out.xa->CreateSourceVoice(&out.voice, &wf.Format))) return std::nullopt;
+    bool ok = SUCCEEDED(XAudio2Create(&out.xa, 0, XAUDIO2_DEFAULT_PROCESSOR));
+    ok = ok && SUCCEEDED(out.xa->RegisterForCallbacks(&g_device));
+    ok = ok && SUCCEEDED(out.xa->CreateMasteringVoice(&out.master));
+    ok = ok && SUCCEEDED(out.xa->CreateSourceVoice(&out.voice, &wf.Format));
+    if (!ok) {
+        Close(out);
+        return std::nullopt;
+    }
     ApplyMatrix(out);
     return out;
 }
 
+// with no device the mix still runs at its rate, so the title's sounds play out and end
+void RenderUnheard(const std::function<void(float*, uint32_t)>& render) {
+    std::vector<float> buf(kFrames * kChannels);
+    auto start = std::chrono::steady_clock::now();
+    for (uint32_t done = 0; done < kRetryBlocks;) {
+        auto due = std::chrono::steady_clock::now() - start;
+        for (; done < kRetryBlocks && done * std::chrono::milliseconds(10) < due; done++) render(buf.data(), kFrames);
+        Sleep(2);
+    }
+}
+
 void Pump(Output& out, const std::function<void(float*, uint32_t)>& render) {
     out.voice->Start();
-    constexpr uint32_t kFrames = kRate / 100;
     constexpr uint32_t kMinQueued = 3;
     constexpr uint32_t kMaxQueued = 10;
     // one slot more than can be queued, so the one rendered is never one XAudio2 still reads
@@ -167,6 +203,7 @@ void Pump(Output& out, const std::function<void(float*, uint32_t)>& render) {
     std::vector<float> bufs(kSlots * kFrames * kChannels);
     uint32_t depth = kMinQueued;
     for (uint32_t n = 0;;) {
+        if (g_device.lost) return;
         if (g_mode_changed.exchange(false)) ApplyMatrix(out);
         XAUDIO2_VOICE_STATE st;
         out.voice->GetState(&st, XAUDIO2_VOICE_NOSAMPLESPLAYED);
@@ -206,11 +243,17 @@ void StartOutput(std::function<void(float*, uint32_t)> render) {
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         std::optional<Output> out = Open();
         opened.set_value();
-        if (!out) {
-            LOGE("audio: XAudio2 unavailable, no sound");
-            return;
+        if (!out) LOGE("audio: XAudio2 unavailable, no sound");
+        for (;;) {
+            if (out) {
+                Pump(*out, render);
+                Close(*out);
+                LOGR("audio: output device lost, reopening");
+            } else {
+                RenderUnheard(render);
+            }
+            out = Open();
         }
-        Pump(*out, render);
     }).detach();
     known.wait();
 }
