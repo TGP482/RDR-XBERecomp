@@ -298,19 +298,30 @@ X86_FUNC(sub_001E0250) {
     ctx.eax = made;
 }
 
+// the tutorial controller's place, an index into the tuned positions (x, y, z) it moves to (sub_001E0030)
+constexpr uint32_t kControllerPlace = 0x50;
+constexpr uint32_t kControllerPositions = 0x686698;
+constexpr uint32_t kPositionBytes = 0xC;
+
+// the side of the place it moves to, as on 4:3, so its whole move in keeps to that side
+static int ControllerSide(uint32_t controller) {
+    uint32_t place = R32(controller + kControllerPlace);
+    float x = std::bit_cast<float>(R32(kControllerPositions + place * kPositionBytes));
+    float middle = x / app::kConsoleAspect;
+    if (middle < -kSide) return -1;
+    if (middle > kSide) return 1;
+    return 0;
+}
+
 // the tutorial's controller, thiscall(controller), vtable 0x3F5850 slot 6: the game keeps its shape on 16:9 but lays
-// it out from the middle, so it moves against its side; the side comes from where it would sit on 4:3
+// it out from the middle, so it moves against the side of where it is going
 X86_EXTERN_FUNC(__imp__sub_001E03C0);
 X86_FUNC(sub_001E03C0) {
-    static Element controller;
     if (g_depth > 0) {
         __imp__sub_001E03C0(ctx, base);
         return;
     }
-    xdk::BeginInlineSide(controller.side, xdk::Fit::Shift);
+    xdk::BeginInlineSide(ControllerSide(ctx.ecx), xdk::Fit::Shift);
     __imp__sub_001E03C0(ctx, base);
-    xdk::ScreenSpan span = xdk::EndInlineSide();
-    span.x0 /= app::NarrowShare();
-    span.x1 /= app::NarrowShare();
-    if (span.drawn) controller.side = SideOf(span);
+    xdk::EndInlineSide();
 }
