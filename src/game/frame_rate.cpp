@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <bit>
 #include <chrono>
+#include <cmath>
 
 #include "xdk/hle.h"
 
@@ -103,4 +104,20 @@ X86_FUNC(sub_00084100) {
     __imp__sub_00084100(ctx, base);
     clock += GF(kClockStep);
     W32(kGameClock, std::bit_cast<uint32_t>(float(clock)));
+}
+
+// the coach physics' step loop locals: the time left to step, one step (OverSampleTime)
+constexpr uint32_t kCoachTimeLeft = 0x20;
+constexpr uint32_t kCoachStep = 0x10;
+
+// the coach physics (sub_00208C50) runs whole steps through its frame and drops the rest, none above 62.5 fps; it runs
+// a step per vertical blank as on the console, split evenly over the frame, at least one a frame
+void CoachPhysicsSteps(X86Context& ctx, uint8_t*) {
+    double blanks = std::min(double(GF(kFrameSeconds)) / GF(kBlankSeconds), kMaxConsoleFrames);
+    double steps = std::max(std::ceil(blanks), 1.0);
+    float step = float(G<float>(ctx.esp + kCoachStep) * blanks / steps);
+    float left = float((steps + 0.5) * step);  // the loop stops with half a step left
+    G<float>(ctx.esp + kCoachStep) = step;
+    G<float>(ctx.esp + kCoachTimeLeft) = left;
+    X87_ST(0) = left;
 }
