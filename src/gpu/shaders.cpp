@@ -1016,6 +1016,17 @@ std::string PixelHlsl(const PixelKey& k) {
     return k.quad ? QuadHlsl(std::move(s)) : s;
 }
 
+// the stage's texture coordinates as its fetch takes them, for the cursor pick
+std::string PickHlsl(const PixelKey& k, int stage) {
+    uint32_t mode = (k.tex_modes >> (stage * 5)) & 0x1F;
+    bool project = k.programmable ? mode == 1 : ((k.proj >> stage) & 1);  // PS_TEXTUREMODES 1 project2d
+    std::string uv = project ? F("i.tc%d.xy / i.tc%d.w", stage, stage) : F("i.tc%d.xy", stage);
+    std::string s = Common();
+    s += "float4 main(VOut i) : SV_Target {\n";
+    s += "    return float4(" + TexUv(k.tex[stage], stage, uv) + ", 0, 1);\n}\n";
+    return s;
+}
+
 // the vertex shader hands on the pixel position as drawn and as pulled (e), the pixel shader takes the stretch back out
 std::string QuadHlsl(std::string s) {
     auto sub = [&](const char* at, const char* before, const char* after) {

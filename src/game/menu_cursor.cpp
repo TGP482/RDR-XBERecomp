@@ -1,6 +1,7 @@
 // The menus' cursor focuses the option under it as the D-pad would: buttons, combos and sliders, each by its row, and
 // in the Flash menus (the save popup's Yes and No, the pre-level Start, Weapon Selection and Shop) through the
-// selection their own script steps with Up and Down.
+// selection their own script steps with Up and Down. The front end's book pages lie on a 3D book: the row comes from
+// where the renderer saw the cursor on the book's page texture.
 // Only a move acts, so a page opens on its own selection and the keys keep theirs; a click then presses A.
 #include <algorithm>
 #include <cmath>
@@ -9,6 +10,7 @@
 #include <vector>
 
 #include "core/input.h"
+#include "d3d/pick.h"
 #include "game/load_show.h"
 #include "xdk/hle.h"
 
@@ -35,6 +37,30 @@ constexpr uint32_t kUnfocus = 0x14;
 constexpr uint32_t kSlider = 0xF;
 constexpr uint32_t kSliderLinks = 0x114;
 constexpr uint32_t kSliderLinkCount = 0x118;
+
+// the front end's books (story and journal): their pages, drawn into a 512 x 256 texture in their own units, rows
+// running down it unless FlipVertical; an engine texture's D3D texture
+constexpr uint32_t kBookPages = 0x234;
+constexpr uint32_t kBookPageCount = 0x238;
+constexpr uint32_t kBookFlip = 0x210;
+constexpr uint32_t kBookTexture = 0x254;
+constexpr uint32_t kTextureSource = 0x18;
+constexpr uint32_t kSourceD3D = 0x8;
+constexpr float kBookHeight = 256.0f;
+constexpr size_t kMaxBooks = 4;
+std::vector<uint32_t> g_books;  // every one drawn
+
+// the book the page is on, 0 for none
+uint32_t BookOf(uint32_t page) {
+    for (uint32_t book : g_books) {
+        uint32_t pages = R32(book + kBookPages);
+        uint32_t count = G<uint16_t>(book + kBookPageCount);
+        for (uint32_t i = 0; pages && i < count; i++) {
+            if (R32(pages + i * 4) == page) return book;
+        }
+    }
+    return 0;
+}
 
 struct Row {
     int index;
@@ -98,11 +124,23 @@ void CallSlot(X86Context& ctx, uint32_t widget, uint32_t slot, std::initializer_
     CallGuest(ctx, R32(R32(widget) + slot), args);
 }
 
+// the cursor's place on the page, false off it; a book page's from the renderer, which follows the cursor
+bool CursorOnPage(uint32_t page, float& x, float& y) {
+    if (!input::MenuCursorAt(x, y)) return false;
+    y *= kPageHeight;
+    uint32_t book = BookOf(page);
+    if (!book) return true;
+    float v = 0.0f;
+    if (!xdk::Picked(x, v)) return false;
+    y = G<uint8_t>(book + kBookFlip) ? (1.0f - v) * kBookHeight : v * kBookHeight;
+    return true;
+}
+
 void UpdateHover(X86Context& ctx, uint32_t page) {
     float x = 0.0f;
     float y = 0.0f;
-    if (!input::MenuCursorAt(x, y) || !UpdateSeen(page, x, y)) return;
-    int hovered = Under(page, y * kPageHeight);
+    if (!CursorOnPage(page, x, y) || !UpdateSeen(page, x, y)) return;
+    int hovered = Under(page, y);
     int focused = int(R32(page + kFocused));
     if (hovered < 0 || hovered == focused) return;
     if (focused >= 0 && uint32_t(focused) < R32(page + kWidgetCount)) {
@@ -247,6 +285,21 @@ X86_FUNC(sub_0001AE90) {
     if (G<uint8_t>(page + kActive)) UpdateHover(ctx, page);
     ctx.ecx = page;
     __imp__sub_0001AE90(ctx, base);
+}
+
+// the book's page into its texture, thiscall(book, texture, page) ret 8, before the book is drawn with it
+X86_EXTERN_FUNC(__imp__sub_00042400);
+X86_FUNC(sub_00042400) {
+    if (std::find(g_books.begin(), g_books.end(), ctx.ecx) == g_books.end() && g_books.size() < kMaxBooks) {
+        g_books.push_back(ctx.ecx);
+    }
+    uint32_t texture = R32(ctx.ecx + kBookTexture);
+    uint32_t source = texture ? R32(texture + kTextureSource) : 0;
+    float x = 0.0f;
+    float y = 0.0f;
+    bool at = input::MenuCursorAt(x, y);
+    xdk::SetPick(at && source ? R32(source + kSourceD3D) : 0, x, y);
+    __imp__sub_00042400(ctx, base);
 }
 
 // the popups' update, fastcall(popup): boot, load and save, each through its own

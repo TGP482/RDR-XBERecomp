@@ -14,6 +14,8 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -35,6 +37,7 @@
 #include "core/diag.h"
 #include "core/log.h"
 #include "d3d/occlusion.h"
+#include "d3d/pick.h"
 #include "gpu/backend.h"
 #include "gpu/ext.h"
 #include "gpu/shaders.h"
@@ -49,6 +52,8 @@ using Microsoft::WRL::ComPtr;
 
 namespace gpu {
 
+std::string PickHlsl(const PixelKey& k, int stage);  // gpu/shaders.cpp
+
 namespace {
 
 constexpr int kFrames = 3;
@@ -61,11 +66,13 @@ constexpr uint32_t kSamplerCount = 2048;
 constexpr uint32_t kRtvCount = 1024;
 constexpr uint32_t kDsvCount = 256;
 constexpr uint32_t kSmaaTargets = 3;  // edges, blend weights, the blended frame
-// views past the swap chain's: SMAA's targets, HDR output's frame and panel, then ambient occlusion's pair
+// views past the swap chain's: SMAA's targets, HDR output's frame and panel, ambient occlusion's pair, the cursor pick
 constexpr uint32_t kSmaaRtv = 0;
 constexpr uint32_t kOutRtv = kSmaaRtv + kSmaaTargets;
 constexpr uint32_t kAoRtv = kOutRtv + 2;
-constexpr uint32_t kPostRtvs = kAoRtv + 2;
+constexpr uint32_t kPickRtv = kAoRtv + 2;
+constexpr uint32_t kPostRtvs = kPickRtv + 1;
+constexpr DXGI_FORMAT kPickFormat = DXGI_FORMAT_R32G32_FLOAT;  // texture coordinates, -1 where none
 constexpr DXGI_FORMAT kHdrFormat = DXGI_FORMAT_R16G16B16A16_UNORM;  // HDR output's frame
 constexpr DXGI_FORMAT kHdr10Format = DXGI_FORMAT_R10G10B10A2_UNORM;
 constexpr float kDefaultPaperNits = 200.0f;
@@ -74,6 +81,12 @@ constexpr float kSdrWhiteUnit = 0.08f;  // Windows' SDR white level: 1000 is 80 
 constexpr DXGI_FORMAT kBgra = DXGI_FORMAT_B8G8R8A8_UNORM;
 constexpr uint32_t kQueries = 8192;  // occlusion queries in flight, several frames of counted draws
 constexpr uint32_t kNoQuery = ~0u;
+
+// the cursor pick: the texture, the cursor over the window, then the coordinates read back (u, v bits), 0 for none
+std::atomic<uint32_t> g_pick_texture{0};
+std::atomic<float> g_pick_x{0};
+std::atomic<float> g_pick_y{0};
+std::atomic<uint64_t> g_picked{0};
 
 // perf diagnostic: where a frame's time goes, logged once a second with diag::Perf
 using PerfClock = std::chrono::steady_clock;
@@ -906,6 +919,10 @@ private:
     void SetBlendFactorStencilRef(const State& s);
     void UpdateTargetUsed(uint32_t data);
     void DrawGeometry(const Assembled& a);
+    void DrawPick(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, PsoKey k);
+    int PickStage(const State& s);
+    bool EnsurePickTarget(uint32_t w, uint32_t h);
+    void ReadPick();
     void UploadVertexBuffers(const Assembled& a);
     // visibility tests
     bool EnsureQueries();
@@ -1136,6 +1153,14 @@ private:
     D3D12_RESOURCE_STATES ao_state_[2] = {};
     uint32_t ao_w_ = 0;
     uint32_t ao_h_ = 0;
+    // the cursor pick: draws reading the picked texture also write where they read it, cleared once a frame
+    ComPtr<ID3D12Resource> pick_;
+    D3D12_RESOURCE_STATES pick_state_ = {};
+    uint32_t pick_w_ = 0;
+    uint32_t pick_h_ = 0;
+    uint64_t pick_frame_ = UINT64_MAX;
+    ComPtr<ID3D12Resource> pick_rb_[kFrames];
+    uint64_t pick_fence_[kFrames] = {};
     uint8_t ramp_[768] = {};
     bool ramp_dirty_ = false;
     uint32_t contrast_set_ = 50;  // the contrast setting the lookup holds
@@ -3240,6 +3265,100 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     uint32_t query = BeginCountedDraw(s);
     DrawGeometry(a);
     EndCountedDraw(query);
+    if (g_pick_texture) DrawPick(s, a, sh, pk, k);
+}
+
+bool D3D12Backend::EnsurePickTarget(uint32_t w, uint32_t h) {
+    if (pick_ && pick_w_ == w && pick_h_ == h) return true;
+    if (!CreatePostTarget(pick_, pick_state_, kPickFormat, w, h, kPickRtv)) return false;
+    pick_w_ = w;
+    pick_h_ = h;
+    pick_frame_ = UINT64_MAX;
+    return true;
+}
+
+// the draw again into pick_, writing the picked texture's coordinates; the next draw binds its own targets again
+// the stage reading the picked texture's pixels, through any texture made over them; -1 for none
+int D3D12Backend::PickStage(const State& s) {
+    TextureDesc picked;
+    if (!Describe(g_pick_texture, picked)) return -1;
+    for (int i = 0; i < 4; i++) {
+        TextureDesc d;
+        if (s.textures[size_t(i)] && Describe(s.textures[size_t(i)], d) && d.data == picked.data) return i;
+    }
+    return -1;
+}
+
+void D3D12Backend::DrawPick(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, PsoKey k) {
+    int stage = PickStage(s);
+    bool points = a.topology == Topology::Points;
+    if (stage < 0 || sh.quad || points || !bound_rt_ || !EnsurePickTarget(bound_rt_->w, bound_rt_->h)) return;
+    uint64_t ph;
+    ID3DBlob* ps = Compile(PickHlsl(pk, stage), "main", "ps_5_0", ph);
+    if (!ps) return;
+    k.ps = ph;
+    k.has_rt = 1;
+    k.rtfmt = kPickFormat;
+    k.msaa = 0;
+    k.has_ds = 0;
+    k.blend = 0;
+    k.wmask = D3D12_COLOR_WRITE_ENABLE_ALL;
+    k.zen = 0;
+    k.zwrite = 0;
+    k.sten = 0;
+    ID3D12PipelineState* pso = EnsurePipeline(k, sh.vs_code, ps);
+    if (!pso) return;
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv = PostRtv(kPickRtv);
+    Transition(pick_.Get(), pick_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    if (pick_frame_ != frame_) {
+        const float none[4] = {-1, -1, 0, 0};
+        cl_->ClearRenderTargetView(rtv, none, 0, nullptr);
+        pick_frame_ = frame_;
+    }
+    cl_->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+    cl_->SetPipelineState(pso);
+    binds_.pso = pso;
+    DrawGeometry(a);
+    bound_rt_ = bound_ds_ = nullptr;
+}
+
+// a slot done on the GPU becomes the pick, then the texel under the cursor goes into it when this frame drew one
+void D3D12Backend::ReadPick() {
+    uint32_t slot = uint32_t(frame_ % kFrames);
+    if (pick_fence_[slot] && pick_fence_[slot] <= fence_->GetCompletedValue()) {
+        float uv[2] = {-1, -1};
+        D3D12_RANGE range{0, sizeof(uv)};
+        void* p = nullptr;
+        if (SUCCEEDED(pick_rb_[slot]->Map(0, &range, &p))) {
+            std::memcpy(uv, p, sizeof(uv));
+            pick_rb_[slot]->Unmap(0, nullptr);
+        }
+        bool on = uv[0] >= 0 && uv[1] >= 0;
+        g_picked = on ? uint64_t(std::bit_cast<uint32_t>(uv[0])) << 32 | std::bit_cast<uint32_t>(uv[1]) : 0;
+        pick_fence_[slot] = 0;
+    }
+    if (pick_frame_ != frame_) {
+        if (!pick_fence_[slot]) g_picked = 0;
+        return;
+    }
+    if (pick_fence_[slot]) return;
+    if (!pick_rb_[slot]) {
+        D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_READBACK};
+        D3D12_RESOURCE_DESC bd = BufferDesc(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        if (FAILED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_COPY_DEST,
+                                                 nullptr, IID_PPV_ARGS(&pick_rb_[slot])))) {
+            return;
+        }
+    }
+    UINT x = std::min(UINT(std::max(g_pick_x.load(), 0.0f) * float(pick_w_)), pick_w_ - 1);
+    UINT y = std::min(UINT(std::max(g_pick_y.load(), 0.0f) * float(pick_h_)), pick_h_ - 1);
+    D3D12_BOX box{x, y, 0, x + 1, y + 1, 1};
+    D3D12_TEXTURE_COPY_LOCATION dl{pick_rb_[slot].Get(), D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT};
+    dl.PlacedFootprint.Footprint = {kPickFormat, 1, 1, 1, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT};
+    D3D12_TEXTURE_COPY_LOCATION sl{pick_.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
+    Transition(pick_.Get(), pick_state_, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    cl_->CopyTextureRegion(&dl, 0, 0, 0, &sl, &box);
+    pick_fence_[slot] = fence_value_ + 1;  // the next Submit carries it
 }
 
 // a guest rect scaled to the target and clamped to it
@@ -4109,6 +4228,7 @@ void D3D12Backend::Present(const Surface& front) {
 
     uint32_t bi = swap_->GetCurrentBackBufferIndex();
     DrawFrame(t, bi);
+    ReadPick();
     Submit(false);
     present_fence_[presents_ % (kFrames + 1)].store(fence_value_);
     DeliverReports();
@@ -4451,3 +4571,17 @@ void D3D12Backend::SetGamma(const uint8_t* ramp) {
 std::unique_ptr<Backend> CreateBackend() { return std::make_unique<D3D12Backend>(); }
 
 }  // namespace gpu
+
+void xdk::SetPick(uint32_t texture, float x, float y) {
+    gpu::g_pick_x = x;
+    gpu::g_pick_y = y;
+    gpu::g_pick_texture = texture;
+}
+
+bool xdk::Picked(float& u, float& v) {
+    uint64_t uv = gpu::g_picked;
+    if (!uv) return false;
+    u = std::bit_cast<float>(uint32_t(uv >> 32));
+    v = std::bit_cast<float>(uint32_t(uv));
+    return true;
+}
