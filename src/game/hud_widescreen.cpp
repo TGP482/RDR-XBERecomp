@@ -159,12 +159,19 @@ X86_FUNC(sub_001D8F60) {
     EndElement(bar);
 }
 
+// the HUD's 2D width scale (game/fov.cpp), and the viewports' shape a kept draw scales by as the console does
+constexpr uint32_t kHudShape = 0x416BBC;
+constexpr uint32_t kViewportShape = 0x413D18;
+
 // the letterbox, thiscall(hud): its bars and torn edges already span the screen, kept
 X86_EXTERN_FUNC(__imp__sub_001D7120);
 X86_FUNC(sub_001D7120) {
+    float hud_shape = G<float>(kHudShape);
+    G<float>(kHudShape) = G<float>(kViewportShape);
     xdk::BeginInlineKeep();
     __imp__sub_001D7120(ctx, base);
     xdk::EndInlineKeep();
+    G<float>(kHudShape) = hud_shape;
 }
 
 // the lock reticle, thiscall(reticle): centred on its target in the 3D view, kept

@@ -32,13 +32,19 @@ constexpr uint32_t kWideShape = 0x3D4DB4;
 constexpr uint32_t kViewportShape = 0x413D18;
 constexpr uint32_t kScreenWidth = 0x413C44;
 constexpr uint32_t kScreenHeight = 0x413C48;
+// the HUD's copy of the viewports' shape (sub_001DCA70), the scale of its 2D widths; its 2D shows at 4:3, so it lays
+// out the console's 640 wide screen across the screen's pixels as its positions do
+constexpr uint32_t kHudShape = 0x416BBC;
+constexpr float kConsoleWidth = 640.0f;
 
 void FollowOutputShape() {
     float shape = app::OutputAspect();
     G<uint8_t>(kWide) = app::Wide();
     G<float>(kWideShape) = shape;
     uint32_t width = R32(kScreenWidth);
-    if (width) G<float>(kViewportShape) = float(R32(kScreenHeight)) / float(width) * shape;
+    if (!width) return;
+    G<float>(kViewportShape) = float(R32(kScreenHeight)) / float(width) * shape;
+    G<float>(kHudShape) = float(width) / kConsoleWidth;
 }
 
 float FovScale() {
