@@ -13,6 +13,7 @@
 
 #include <toml++/toml.hpp>
 
+#include "app/app.h"
 #include "audio/audio.h"
 
 namespace app {
@@ -90,6 +91,7 @@ std::atomic<bool>& HudHidden() {
 void LoadRdr(const void* table) {
     const toml::table& t = *static_cast<const toml::table*>(table);
     RdrSettings& s = Rdr();
+    if (!t.contains("fps_cap")) Get().fps_cap = kFpsCapRefresh;  // MAX FRAME RATE starts at the refresh rate
     s.monitor = t["monitor"].value_or(s.monitor);
     s.fps_counter = t["fps_counter"].value_or(s.fps_counter);
     s.fmv_scale = std::min(t["fmv_scale"].value_or(s.fmv_scale), 1u);

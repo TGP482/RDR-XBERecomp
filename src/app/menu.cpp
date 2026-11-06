@@ -615,6 +615,7 @@ void RestoreDefaults(int page) {
     std::string join_ip = Get().join_ip;  // no row on the panel
     Get() = Settings{};
     Get().join_ip = join_ip;
+    Get().fps_cap = kFpsCapRefresh;
     r.monitor = fresh.monitor;
     r.fps_counter = fresh.fps_counter;
     r.fov = fresh.fov;
