@@ -4,6 +4,7 @@
 // where the renderer saw the cursor on the book's page texture.
 // Only a move acts, so a page opens on its own selection and the keys keep theirs; a click then presses A.
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <initializer_list>
@@ -18,16 +19,19 @@ using namespace kernel;
 
 namespace {
 
+constexpr float kPageWidth = 640.0f;
 constexpr float kPageHeight = 448.0f;
 constexpr float kMaxRow = 40.0f;  // a row reaches the next one's top, at most this far
+constexpr float kSameRow = 1.0f;  // tops this close share a row, side by side
 // page: active, its widgets, their count, the focused one
 constexpr uint32_t kActive = 0x3D;
 constexpr uint32_t kWidgets = 0x40;
 constexpr uint32_t kWidgetCount = 0x298;
 constexpr uint32_t kFocused = 0x31C;
 constexpr uint32_t kMaxWidgets = (kWidgetCount - kWidgets) / 4;
-// widget: kind, top, focusable when both are set, its focus(quiet) and unfocus slots
+// widget: kind, place, focusable when both are set, its focus(quiet) and unfocus slots
 constexpr uint32_t kKind = 0x48;
+constexpr uint32_t kLeft = 0x4C;
 constexpr uint32_t kTop = 0x50;
 constexpr uint32_t kSelectable = 0xD8;
 constexpr uint32_t kEnabled = 0xE6;
@@ -46,13 +50,34 @@ constexpr uint32_t kBookFlip = 0x210;
 constexpr uint32_t kBookTexture = 0x254;
 constexpr uint32_t kTextureSource = 0x18;
 constexpr uint32_t kSourceD3D = 0x8;
+constexpr float kBookWidth = 512.0f;
 constexpr float kBookHeight = 256.0f;
 constexpr size_t kMaxBooks = 4;
-std::vector<uint32_t> g_books;  // every one drawn
+// a book not drawn for this long may be freed: the front end's go when a level loads
+constexpr auto kBookShown = std::chrono::milliseconds(250);
+struct Book {
+    uint32_t book;
+    std::chrono::steady_clock::time_point drawn;
+};
+std::vector<Book> g_books;
+
+void UpdateBookDrawn(uint32_t book) {
+    auto now = std::chrono::steady_clock::now();
+    auto it = std::find_if(g_books.begin(), g_books.end(), [&](const Book& b) { return b.book == book; });
+    if (it != g_books.end()) {
+        it->drawn = now;
+        return;
+    }
+    if (g_books.size() == kMaxBooks) g_books.erase(g_books.begin());
+    g_books.push_back({book, now});
+}
 
 // the book the page is on, 0 for none
 uint32_t BookOf(uint32_t page) {
-    for (uint32_t book : g_books) {
+    auto now = std::chrono::steady_clock::now();
+    for (const Book& b : g_books) {
+        if (now - b.drawn > kBookShown) continue;
+        uint32_t book = b.book;
         uint32_t pages = R32(book + kBookPages);
         uint32_t count = G<uint16_t>(book + kBookPageCount);
         for (uint32_t i = 0; pages && i < count; i++) {
@@ -64,6 +89,7 @@ uint32_t BookOf(uint32_t page) {
 
 struct Row {
     int index;
+    float left;
     float top;
 };
 
@@ -90,10 +116,11 @@ bool UpdateSeen(uint32_t page, float x, float y) {
     return moved;
 }
 
-float RowTop(uint32_t widget) {
+// the widget that places the row: a slider's title, else the widget itself
+uint32_t Placed(uint32_t widget) {
     uint32_t links = R32(widget + kSliderLinks);
     bool slider = R32(widget + kKind) == kSlider && links && G<uint16_t>(widget + kSliderLinkCount);
-    return G<float>((slider ? R32(links) : widget) + kTop);
+    return slider ? R32(links) : widget;
 }
 
 std::vector<Row> Rows(uint32_t page) {
@@ -102,21 +129,35 @@ std::vector<Row> Rows(uint32_t page) {
     for (uint32_t i = 0; i < count; i++) {
         uint32_t widget = R32(page + kWidgets + i * 4);
         if (!widget || !G<uint8_t>(widget + kSelectable) || !G<uint8_t>(widget + kEnabled)) continue;
-        rows.push_back({int(i), RowTop(widget)});
+        uint32_t placed = Placed(widget);
+        rows.push_back({int(i), G<float>(placed + kLeft), G<float>(placed + kTop)});
     }
     std::sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) { return a.top < b.top; });
     return rows;
 }
 
-// the widget whose row the point is in, -1 for none
-int Under(uint32_t page, float y) {
-    std::vector<Row> rows = Rows(page);
-    for (size_t r = 0; r < rows.size(); r++) {
-        float bottom = rows[r].top + kMaxRow;
-        if (r + 1 < rows.size()) bottom = std::min(bottom, rows[r + 1].top);
-        if (y >= rows[r].top && y < bottom) return rows[r].index;
+// the next row's top below this one's, at most kMaxRow down
+float RowBottom(const std::vector<Row>& rows, size_t r) {
+    for (size_t n = r + 1; n < rows.size(); n++) {
+        if (rows[n].top > rows[r].top + kSameRow) return std::min(rows[r].top + kMaxRow, rows[n].top);
     }
-    return -1;
+    return rows[r].top + kMaxRow;
+}
+
+// the widget whose row the point is in, the nearest in x of a row side by side, -1 for none
+int Under(uint32_t page, float x, float y) {
+    std::vector<Row> rows = Rows(page);
+    int under = -1;
+    float nearest = 0.0f;
+    for (size_t r = 0; r < rows.size(); r++) {
+        if (y < rows[r].top || y >= RowBottom(rows, r)) continue;
+        float dx = std::abs(x - rows[r].left);
+        if (under < 0 || dx < nearest) {
+            under = rows[r].index;
+            nearest = dx;
+        }
+    }
+    return under;
 }
 
 void CallSlot(X86Context& ctx, uint32_t widget, uint32_t slot, std::initializer_list<uint32_t> args) {
@@ -127,11 +168,13 @@ void CallSlot(X86Context& ctx, uint32_t widget, uint32_t slot, std::initializer_
 // the cursor's place on the page, false off it; a book page's from the renderer, which follows the cursor
 bool CursorOnPage(uint32_t page, float& x, float& y) {
     if (!input::MenuCursorAt(x, y)) return false;
+    x *= kPageWidth;
     y *= kPageHeight;
     uint32_t book = BookOf(page);
     if (!book) return true;
     float v = 0.0f;
     if (!xdk::Picked(x, v)) return false;
+    x *= kBookWidth;
     y = G<uint8_t>(book + kBookFlip) ? (1.0f - v) * kBookHeight : v * kBookHeight;
     return true;
 }
@@ -140,7 +183,7 @@ void UpdateHover(X86Context& ctx, uint32_t page) {
     float x = 0.0f;
     float y = 0.0f;
     if (!CursorOnPage(page, x, y) || !UpdateSeen(page, x, y)) return;
-    int hovered = Under(page, y);
+    int hovered = Under(page, x, y);
     int focused = int(R32(page + kFocused));
     if (hovered < 0 || hovered == focused) return;
     if (focused >= 0 && uint32_t(focused) < R32(page + kWidgetCount)) {
@@ -290,9 +333,7 @@ X86_FUNC(sub_0001AE90) {
 // the book's page into its texture, thiscall(book, texture, page) ret 8, before the book is drawn with it
 X86_EXTERN_FUNC(__imp__sub_00042400);
 X86_FUNC(sub_00042400) {
-    if (std::find(g_books.begin(), g_books.end(), ctx.ecx) == g_books.end() && g_books.size() < kMaxBooks) {
-        g_books.push_back(ctx.ecx);
-    }
+    UpdateBookDrawn(ctx.ecx);
     uint32_t texture = R32(ctx.ecx + kBookTexture);
     uint32_t source = texture ? R32(texture + kTextureSource) : 0;
     float x = 0.0f;
