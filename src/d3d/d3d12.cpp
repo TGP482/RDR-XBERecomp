@@ -36,6 +36,7 @@
 #include "app/game_settings.h"
 #include "core/diag.h"
 #include "core/log.h"
+#include "d3d/dirty_marks.h"
 #include "d3d/occlusion.h"
 #include "d3d/pick.h"
 #include "gpu/backend.h"
@@ -876,6 +877,7 @@ private:
     bool AssembleDraw(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices,
                       Assembled& a);
     bool BindTargets(const State& s);
+    bool LatchTargetWrite(Target& t);
     void EnsureVertexShader(const State& s, const Assembled& a, DrawShaders& sh);
     bool BindStageTexturesAndTargets(const State& s, DrawTextures& stages);
     ID3D12Resource* BindTexture(const State& s, int stage, DrawTextures& stages);
@@ -1148,6 +1150,12 @@ private:
     uint32_t smaa_w_ = 0;
     uint32_t smaa_h_ = 0;
     DXGI_FORMAT smaa_fmt_ = DXGI_FORMAT_UNKNOWN;
+    // the target LatchTargetWrite last read the epoch of, and the marks then
+    struct Latched {
+        const Target* target = nullptr;
+        uint64_t marks = 0;
+    };
+    Latched latched_;
     // ambient occlusion: the raw pass and its first blur, each with view z beside it
     ComPtr<ID3D12Resource> ao_[2];
     D3D12_RESOURCE_STATES ao_state_[2] = {};
@@ -1633,13 +1641,21 @@ void D3D12Backend::UpdateTargetUsed(uint32_t data) {
     recent_used_[recent_used_next_++ % recent_used_.size()] = {data, frame_};
 }
 
+// every draw: the epoch is read again only after a mark since this target's last read
+bool D3D12Backend::LatchTargetWrite(Target& t) {
+    uint64_t marks = g_dirty_marks.load();
+    if (latched_.target == &t && latched_.marks == marks) return false;
+    latched_ = {&t, marks};
+    return LatchCpuWrite(t);
+}
+
 bool D3D12Backend::BindTargets(const State& s) {
     Target* rt = EnsureTarget(s.rt, false);
     Target* ds = s.rs[kRsZEnable] || s.rs[kRsStencilEnable] ? EnsureTarget(s.zs, true) : nullptr;
     if (rt && ds && (rt->w != ds->w || rt->h != ds->h || SampleCount(*rt) != SampleCount(*ds))) ds = nullptr;
     if (!rt && !ds) return false;
     if (rt) {
-        if (LatchCpuWrite(*rt)) UploadTarget(*rt, s.rt);
+        if (LatchTargetWrite(*rt)) UploadTarget(*rt, s.rt);
         Transition(rt->res.Get(), rt->state, D3D12_RESOURCE_STATE_RENDER_TARGET);
         rt->drawn = true;
     }
@@ -2267,8 +2283,15 @@ void FillTextureView(const Tex& tx, const TextureDesc& d, D3D12_SHADER_RESOURCE_
 
 // a P8 texture's palette: its colours, their address (part of the texture's key) and their hash, all 0 without one
 struct StagePalette {
-    uint32_t colours[256] = {};
+    const uint32_t* colours = nullptr;
     uint32_t va = 0;
+    uint64_t hash = 0;
+};
+
+// a palette as last read, the colours past its size 0, and their hash
+struct PaletteCopy {
+    uint32_t colours[256] = {};
+    size_t bytes = 0;
     uint64_t hash = 0;
 };
 
@@ -2282,9 +2305,19 @@ void ReadStagePalette(const State& s, int stage, const TextureDesc& d, StagePale
     uint32_t header = s.palettes[size_t(stage)];
     palette.va = mem::VirtualFromPhysical(kernel::R32(header + kPaletteData));
     uint32_t size_code = kernel::R32(header + kPaletteCommon) >> kPaletteSizeShift;
-    size_t bytes = (std::size(palette.colours) >> size_code) * sizeof(uint32_t);
-    std::memcpy(palette.colours, kernel::HostPtr(palette.va), bytes);
-    palette.hash = Hash(palette.colours, sizeof(palette.colours));
+    // compared every draw, hashed only when the colours changed
+    static std::unordered_map<uint32_t, PaletteCopy> copies;
+    PaletteCopy& copy = copies[palette.va];
+    size_t bytes = (std::size(copy.colours) >> size_code) * sizeof(uint32_t);
+    const void* now = kernel::HostPtr(palette.va);
+    if (copy.bytes != bytes || std::memcmp(copy.colours, now, bytes)) {
+        std::memset(copy.colours, 0, sizeof(copy.colours));
+        std::memcpy(copy.colours, now, bytes);
+        copy.bytes = bytes;
+        copy.hash = Hash(copy.colours, sizeof(copy.colours));
+    }
+    palette.colours = copy.colours;
+    palette.hash = copy.hash;
 }
 
 // a texture in guest memory: made again when its layout changed, uploaded again when its bytes did
@@ -3624,7 +3657,9 @@ void D3D12Backend::Copy(const Surface& src, const Surface& dst, uint32_t count, 
     }
     // pixels the CPU made: the copy happens in memory, textures and targets pick it up from there
     if (!src_t || !src_t->drawn) {
-        if (!CopySurfaceMemory(src, dst, count, src_rects, dst_points)) {
+        bool copied = CopySurfaceMemory(src, dst, count, src_rects, dst_points);
+        g_dirty_marks.fetch_add(1);
+        if (!copied) {
             LOG_FIRST(8, "d3d12: CopyRects %08X to %08X skipped", src.data, dst.data);
         } else if (Target* dst_t = FindTarget(dst, false)) {
             UploadTarget(*dst_t, dst);
