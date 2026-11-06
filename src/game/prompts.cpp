@@ -19,11 +19,11 @@ struct PromptGlyph {
     char16_t glyph;
     input::PromptButton button;
 };
-// as the game's own text uses them: A joins, B is melee, X reloads, Y sneaks, LT keeps the guns drawn, RT fires;
+// as the game's own text uses them: A joins, B is melee, X sneaks, Y reloads, LT keeps the guns drawn, RT fires;
 // the white and black ones stand where the PS2 had L2 and R2
 constexpr PromptGlyph kGlyphs[] = {
     {u'\u00BA', input::kPromptA},           {u'\u00BE', input::kPromptB},
-    {u'\u00BC', input::kPromptX},           {u'\u00BD', input::kPromptY},
+    {u'\u00BC', input::kPromptY},           {u'\u00BD', input::kPromptX},
     {u'\u2020', input::kPromptLeftTrigger}, {u'\u2021', input::kPromptRightTrigger},
     {u'\u2022', input::kPromptWhite},       {u'\u2023', input::kPromptBlack},
 };

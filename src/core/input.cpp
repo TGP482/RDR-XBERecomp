@@ -156,9 +156,9 @@ struct Target {
     bool riding = false;  // presses only on a horse, where the on foot actions on its button press nothing
 };
 
-// The console pad's layout: A jump and dodge, B melee, X reload, Y action, black special move and zoom, white cycles
+// The console pad's layout: A jump and dodge, B melee, X action, Y reload, black special move and zoom, white cycles
 // weapons, the D-pad's sides step weapons, LT draws and targets, RT fires, the left thumb crouches and the right one
-// starts Dead Eye. A duel draws with the right stick: back grabs, forward draws. On a horse A spurs and Y dismounts.
+// starts Dead Eye. A duel draws with the right stick: back grabs, forward draws. On a horse A spurs and X dismounts.
 constexpr Target kActions[] = {
     {{"move_forward", "MOVE FORWARD", "W"}, kMoveTarget},
     {{"move_back", "MOVE BACK", "S"}, kMoveTarget + 1},
@@ -167,11 +167,11 @@ constexpr Target kActions[] = {
     {{"walk", "WALK", "Alt"}, kWalk},
     {{"jump", "JUMP / DODGE", "Space"}, kAnalogA},
     {{"crouch", "CROUCH", "C"}, kButtonTarget + 6},
-    {{"action", "ACTION / SNEAK", "E,F"}, 3},
-    {{"melee", "MELEE", "F"}, kAnalogB},
+    {{"action", "ACTION / SNEAK", "F"}, 2},
+    {{"melee", "MELEE", "E"}, kAnalogB},
     {{"fire", "FIRE", "LMB"}, 7},
     {{"draw", "DRAW / TARGET", "RMB"}, kAnalogLeftTrigger},
-    {{"reload", "RELOAD", "R"}, 2},
+    {{"reload", "RELOAD", "R"}, 3},
     {{"dead_eye", "DEAD EYE", "Q,MMB"}, kButtonTarget + 7},
     {{"special", "SPECIAL MOVE / ZOOM", "Z"}, 4},
     {{"cycle_weapons", "CYCLE WEAPONS", "Tab"}, 5},
@@ -180,7 +180,7 @@ constexpr Target kActions[] = {
     {{"duel_grab", "GRAB", "Down"}, kStickDownTarget},
     {{"duel_draw", "DRAW", "Up"}, kStickUpTarget},
     {{"spur", "SPUR", "Space"}, kAnalogA, KeyEvent::None, true},
-    {{"dismount", "DISMOUNT", "E"}, 3, KeyEvent::None, true},
+    {{"dismount", "DISMOUNT", "F"}, 2, KeyEvent::None, true},
     {{"pause", "PAUSE", "Escape"}, kButtonTarget + kStart},
     {{"back", "BACK", "Backspace"}, kButtonTarget + 5},
     {{"toggle_hud", "TOGGLE HUD", ""}, kHostKey, KeyEvent::HideHud},
