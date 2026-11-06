@@ -119,6 +119,20 @@ std::atomic<uint64_t> g_pad_ms{0};
 std::atomic<uint32_t> g_pad_held{0};
 std::atomic<bool> g_rumbling{false};  // port 0's motors were last set running
 
+// A name being typed: the keys that type press no action and Enter and Backspace leave A and B alone; the game side
+// keeps it on each frame it reads the typing
+constexpr uint64_t kTextEntryMs = 100;
+constexpr size_t kMaxTyped = 32;
+std::atomic<uint64_t> g_text_entry_ms{0};
+std::mutex g_typed_lock;
+std::string g_typed;
+
+bool TextEntry() { return NowMs() - g_text_entry_ms < kTextEntryMs; }
+
+bool TypesText(int vk) {
+    return (vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9') || vk == VK_SPACE || vk == VK_BACK;
+}
+
 bool KeyboardLast() { return g_keyboard_ms > g_pad_ms; }
 bool InPlay() { return Screen(g_screen.load()) == Screen::Play; }
 bool Active() { return g_hwnd && GetForegroundWindow() == g_hwnd && !g_blocked; }
@@ -380,7 +394,10 @@ void UpdateMouseSettle() {
 // out of play the mouse buttons and the wheel work the menus, so they press no action there
 bool ActionHeld(const std::vector<int>& keys, bool menu) {
     bool no_mouse = menu || g_settle_mouse;
-    return std::any_of(keys.begin(), keys.end(), [&](int vk) { return Down(vk) && !(no_mouse && Mouse(vk)); });
+    bool typing = menu && TextEntry();
+    return std::any_of(keys.begin(), keys.end(), [&](int vk) {
+        return Down(vk) && !(no_mouse && Mouse(vk)) && !(typing && TypesText(vk));
+    });
 }
 
 // in a menu the pause key backs out as B; the pause menu, which Start closes, and cutscenes, which Start skips, keep
@@ -412,8 +429,9 @@ void PressTarget(int b, Pad& p, Sticks& s) {
 void PressMenuKeys(Pad& p) {
     if (InPlay()) return;
     bool click = !g_settle_mouse;
-    if (Down(VK_RETURN) || (click && Down(VK_LBUTTON))) p.analog[kAnalogA] = 0xFF;
-    if (Down(VK_BACK) || (click && Down(VK_RBUTTON))) p.analog[kAnalogB] = 0xFF;
+    bool typing = TextEntry();
+    if ((Down(VK_RETURN) && !typing) || (click && Down(VK_LBUTTON))) p.analog[kAnalogA] = 0xFF;
+    if ((Down(VK_BACK) && !typing) || (click && Down(VK_RBUTTON))) p.analog[kAnalogB] = 0xFF;
     constexpr std::pair<int, int> kKeys[] = {{VK_UP, kDpadUp},       {VK_DOWN, kDpadDown},     {VK_LEFT, kDpadLeft},
                                              {VK_RIGHT, kDpadRight}, {kWheelUp, kDpadUp},      {kWheelDown, kDpadDown}};
     for (auto [vk, bit] : kKeys) {
@@ -646,6 +664,22 @@ void SetScreen(Screen screen) {
 }
 
 void SetAiming(bool on) { g_aiming = on; }
+
+void KeepTextEntry() {
+    if (!TextEntry()) TakeTyped();  // a new name starts with nothing typed
+    g_text_entry_ms = NowMs();
+}
+
+void OnChar(uint32_t ch, bool repeat) {
+    if (!TextEntry() || ch > 0x7F || (repeat && ch == '\r')) return;  // a held Enter's repeats end no name
+    std::lock_guard lock(g_typed_lock);
+    if (g_typed.size() < kMaxTyped) g_typed += char(ch);
+}
+
+std::string TakeTyped() {
+    std::lock_guard lock(g_typed_lock);
+    return std::exchange(g_typed, {});
+}
 
 void SetRiding(bool on) { g_riding = on; }
 

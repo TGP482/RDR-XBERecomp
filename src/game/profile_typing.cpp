@@ -1,0 +1,58 @@
+// The profile page's name takes keys as they are typed: letters go in, Space puts a space, Backspace deletes and Enter
+// ends the name, as the grid's letters, its < and > and End do. Arrows and a click still work the grid.
+#include <algorithm>
+#include <cctype>
+#include <string>
+
+#include "core/input.h"
+#include "xdk/hle.h"
+
+using namespace kernel;
+
+namespace {
+
+// profile page: typing a name, the grid's row and column, the pad's pressed buttons
+constexpr uint32_t kNaming = 0x44E;
+constexpr uint32_t kGridRow = 0x46C;
+constexpr uint32_t kGridColumn = 0x470;
+constexpr uint32_t kPressed = 0x308;
+constexpr uint32_t kButtonA = 0x1000000;
+// the grid's columns; End's place in "ABCDEFGHIJKLMNOPQRSTUVWXYZ<>" then End
+constexpr uint32_t kGridColumns = 0x40E4FC;
+constexpr uint32_t kGridEnd = 28;
+// the grid's letter into the name, thiscall(page, letter) ret 4: '<' deletes, '>' a space
+constexpr uint32_t kEnterLetter = 0x34400;
+
+void EnterLetter(X86Context& ctx, uint32_t page, char letter) {
+    ctx.ecx = page;
+    CallGuest(ctx, kEnterLetter, {uint32_t(uint8_t(letter))});
+}
+
+// the grid's cursor to End, then A ends the name as the game does
+void PressEnd(uint32_t page) {
+    uint32_t columns = std::max(R32(kGridColumns), 1u);
+    W32(page + kGridRow, kGridEnd / columns);
+    W32(page + kGridColumn, kGridEnd % columns);
+    W32(page + kPressed, R32(page + kPressed) | kButtonA);
+}
+
+void TypeName(X86Context& ctx, uint32_t page) {
+    input::KeepTextEntry();
+    for (char c : input::TakeTyped()) {
+        if (std::isalpha(uint8_t(c))) EnterLetter(ctx, page, char(std::toupper(uint8_t(c))));
+        else if (c == ' ') EnterLetter(ctx, page, '>');
+        else if (c == '\b') EnterLetter(ctx, page, '<');
+        else if (c == '\r') PressEnd(page);
+    }
+}
+
+}  // namespace
+
+// the profile page's input, thiscall(page), its pressed buttons read
+X86_EXTERN_FUNC(__imp__sub_00034500);
+X86_FUNC(sub_00034500) {
+    uint32_t page = ctx.ecx;
+    if (G<uint8_t>(page + kNaming)) TypeName(ctx, page);
+    ctx.ecx = page;
+    __imp__sub_00034500(ctx, base);
+}

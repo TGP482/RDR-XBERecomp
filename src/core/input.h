@@ -34,6 +34,11 @@ bool MenuCursorAt(float& x, float& y);
 enum class Screen { Play, Menu, Pause, Cutscene };
 void SetScreen(Screen screen);
 Screen GetScreen();
+// a name being typed, kept on by a call each frame: the keys that type press nothing, Enter and Backspace leave A and
+// B alone, and the characters typed meanwhile wait in TakeTyped
+void KeepTextEntry();
+void OnChar(uint32_t ch, bool repeat);  // window thread, WM_CHAR
+std::string TakeTyped();
 // aiming a weapon: the aim sensitivities apply
 void SetAiming(bool on);
 bool Aiming();

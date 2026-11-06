@@ -24,6 +24,9 @@ void WindowUp(void* hwnd) {
 
 bool WindowMessage(void*, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* result) {
     switch (msg) {
+        case WM_CHAR:
+            input::OnChar(uint32_t(wp), (lp & (1 << 30)) != 0);  // bit 30: a held key's repeat
+            return false;
         case WM_INPUT:
             input::OnRawInput(reinterpret_cast<void*>(lp));
             return false;  // the default handling frees the input's buffer
