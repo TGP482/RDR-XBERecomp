@@ -1462,6 +1462,7 @@ struct InlineSide {
 };
 InlineSide g_inline;
 int g_keep = 0;  // kept draws running
+int g_level = 0;  // runs whose 2D narrows as in a level, even in the front end
 
 // row vectors: a * b
 static void MatMul(const float* a, const float* b, float* out) {
@@ -1495,7 +1496,7 @@ static bool InFrontEnd() {
 
 static bool OnScreen() {
     if (!app::Wide() || g_keep > 0) return false;
-    if (InFrontEnd() && !g_inline.drawing) return false;
+    if (InFrontEnd() && !g_inline.drawing && g_level == 0) return false;
     uint32_t w;
     uint32_t h;
     gpu::SurfaceSize(g_state.rt, w, h);
@@ -1772,6 +1773,8 @@ void xdk::Occlusion(bool gtao) {
 
 void xdk::BeginInlineKeep() { g_keep++; }
 void xdk::EndInlineKeep() { g_keep--; }
+void xdk::BeginInlineLevel() { g_level++; }
+void xdk::EndInlineLevel() { g_level--; }
 
 HLE_STDCALL(D3DDevice_EndPush, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);

@@ -247,6 +247,18 @@ X86_FUNC(sub_000188A0) {
     EndMiddle();
 }
 
+// a load show frame, cdecl(looping): from the front end its state is still FrontEnd, which narrows only the hooked
+// draws, so its 2D narrows as after a level
+X86_EXTERN_FUNC(__imp__sub_00067590);
+X86_FUNC(sub_00067590) {
+    xdk::BeginInlineLevel();
+    __imp__sub_00067590(ctx, base);
+    xdk::EndInlineLevel();
+}
+
+// the load show's sun is about to take the console's 16:9 x squash (0.75): the 2D narrows to 4:3 already
+bool LoadShowSunRound(X86Context&, uint8_t*) { return true; }
+
 // the legal screen's picture (rdrlogoshot), 4:3, drawn over the whole screen
 X86_EXTERN_FUNC(__imp__sub_0005EB40);
 X86_FUNC(sub_0005EB40) {

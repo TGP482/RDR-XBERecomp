@@ -335,6 +335,12 @@ at = 0x6759F
 after = true
 call = "FrameStepEax"
 
+# the load show's sun on a wide screen: no 0.75 x squash, its 2D narrows to 4:3 (src/game/hud_widescreen.cpp)
+[[hook]]
+at = 0x679EB
+call = "LoadShowSunRound"
+on_true = 0x679F3
+
 # the coach physics' step loop: steps every frame, a step's worth per vertical blank (src/game/frame_rate.cpp)
 [[hook]]
 at = 0x208C90

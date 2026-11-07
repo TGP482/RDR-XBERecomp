@@ -26,4 +26,8 @@ ScreenSpan EndInlineSide();
 void BeginInlineKeep();
 void EndInlineKeep();
 
+// 2D drawn meanwhile narrows as in a level, even in the front end; 3D stays as it is
+void BeginInlineLevel();
+void EndInlineLevel();
+
 }  // namespace xdk
