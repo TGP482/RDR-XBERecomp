@@ -401,10 +401,12 @@ bool ActionHeld(const std::vector<int>& keys, bool menu) {
     });
 }
 
-// in a menu the pause key backs out as B; the pause menu, which Start closes, and cutscenes, which Start skips, keep
-// it on Start
-int RemapTarget(int b) {
-    bool back = Screen(g_screen.load()) == Screen::Menu && b == kButtonTarget + kStart;
+// menus and pause menu: the pause key is B (the pause menu closes on B as on Start); a press keeps its first button
+int RemapTarget(int b, bool fresh) {
+    static bool back = false;
+    if (b != kButtonTarget + kStart) return b;
+    Screen screen = Screen(g_screen.load());
+    if (fresh) back = screen == Screen::Menu || screen == Screen::Pause;
     return back ? kAnalogB : b;
 }
 
@@ -493,7 +495,8 @@ void Keyboard(Pad& p) {
         if (kActions[i].button == kAnalogLeftTrigger) held = ToggledAim(held);
         if (!held) continue;
         keys |= 1u << i;
-        PressTarget(RemapTarget(kActions[i].button), p, sticks);
+        bool fresh = !(g_keys_held.load() & (1u << i));
+        PressTarget(RemapTarget(kActions[i].button, fresh), p, sticks);
     }
     PressMenuKeys(p);
     NoteKeysHeld(keys);
