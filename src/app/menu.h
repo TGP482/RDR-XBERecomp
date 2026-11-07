@@ -24,10 +24,15 @@ struct PanelRow {
     std::string label;
     std::string value;
     bool bind = false;  // a key bind, its value its keys
+    bool pad = false;   // a controller button bind, no alternate
 };
 std::vector<PanelRow> PanelRows(int page, size_t section);
 void StepPanelRow(int page, size_t section, size_t row, int step);  // Left / Right
 // a key bind waits for its new key, slot 0 the key, 1 the alternate
 void PressPanelRow(int page, size_t section, size_t row, int slot);
+// the LevelFlow entry clicked on the DEBUG page, once; 0 when none
+uint32_t TakeLevelPick();
+// the DEBUG page's invincibility, the game's own Invulnerable cheat
+bool Invincible();
 
 }  // namespace app
