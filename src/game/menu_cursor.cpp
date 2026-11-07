@@ -30,10 +30,12 @@ constexpr uint32_t kWidgets = 0x40;
 constexpr uint32_t kWidgetCount = 0x298;
 constexpr uint32_t kFocused = 0x31C;
 constexpr uint32_t kMaxWidgets = (kWidgetCount - kWidgets) / 4;
-// widget: kind, place, focusable when both are set, its focus(quiet) and unfocus slots
+// widget: kind, place and the offset drawn from it, focusable when both are set, its focus(quiet) and unfocus slots
 constexpr uint32_t kKind = 0x48;
 constexpr uint32_t kLeft = 0x4C;
 constexpr uint32_t kTop = 0x50;
+constexpr uint32_t kOffsetX = 0x58;
+constexpr uint32_t kOffsetY = 0x5C;
 constexpr uint32_t kSelectable = 0xD8;
 constexpr uint32_t kEnabled = 0xE6;
 constexpr uint32_t kFocus = 0x10;
@@ -131,7 +133,9 @@ std::vector<Row> Rows(uint32_t page) {
         uint32_t widget = R32(page + kWidgets + i * 4);
         if (!widget || !G<uint8_t>(widget + kSelectable) || !G<uint8_t>(widget + kEnabled)) continue;
         uint32_t placed = Placed(widget);
-        rows.push_back({int(i), G<float>(placed + kLeft), G<float>(placed + kTop)});
+        float left = G<float>(placed + kLeft) + G<float>(placed + kOffsetX);
+        float top = G<float>(placed + kTop) + G<float>(placed + kOffsetY);
+        rows.push_back({int(i), left, top});
     }
     std::sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) { return a.top < b.top; });
     return rows;
