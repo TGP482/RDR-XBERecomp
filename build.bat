@@ -1,9 +1,9 @@
 @echo off
 setlocal
-set "GAME_TITLE=Red Dead Revolver"
+set "GAME_TITLE=Red Dead Revolver - XBE Recomp"
 set "GAME_XBE=default.xbe"
 set "GAME_EXE=RDR"
-title %GAME_TITLE% - Build
+title %GAME_TITLE%
 cd /d "%~dp0"
 echo.
 echo   %GAME_TITLE% - build
