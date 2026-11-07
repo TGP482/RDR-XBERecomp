@@ -5,15 +5,16 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
-#include <initializer_list>
 #include <string>
 #include <vector>
 
 #include "app/menu.h"
 #include "app/translations.h"
+#include "game/swui.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
+using namespace swui;
 
 namespace {
 
@@ -39,25 +40,13 @@ constexpr int kSectionsBottom = 295;  // the last section's top, its text clear 
 constexpr int kSectionsStep = 30;
 constexpr float kSectionsScale = 1.195f;
 constexpr size_t kMaxLabel = 31;  // a button's label
-// a page's widgets, their count, the focused one, the pad's pressed buttons; a widget's kind, 4 a combo; a combo's
-// items, each first its text
-constexpr uint32_t kWidgets = 0x40;
-constexpr uint32_t kWidgetCount = 0x298;
-constexpr uint32_t kFocused = 0x31C;
-constexpr uint32_t kPressed = 0x308;
-constexpr uint32_t kWidgetKind = 0x48;
+// a combo's widget kind; its items, each first its text
 constexpr uint32_t kCombo = 4;
 constexpr uint32_t kComboLabel = 0x114;  // the drawn copy, 0x28 is the name parsed once
 constexpr uint32_t kComboItems = 0x140;
 constexpr size_t kItemTextMax = 0x27;
 constexpr uint32_t kLeftArrowAlpha = 0x129C;
 constexpr uint32_t kRightArrowAlpha = 0x12AC;
-constexpr uint32_t kLeft = 0x4000;
-constexpr uint32_t kRight = 0x8000;
-constexpr uint32_t kUp = 0x1000;
-constexpr uint32_t kDown = 0x2000;
-constexpr uint32_t kConfirm = 0x1000000;
-constexpr uint32_t kButtonX = 0x4000000;
 // a section's rows: Player Options' place, spacing and font, closer and smaller past the rows that fit
 constexpr int kRowsTop = 140;
 constexpr int kRowsBottom = 320;
@@ -66,9 +55,6 @@ constexpr int kRowsFit = 20;
 constexpr float kRowsScale = 0.75f;
 // a longer section shows this many rows at a time, scrolling past its first and last
 constexpr size_t kMaxShown = 12;
-// a widget's focus(quiet) and unfocus slots
-constexpr uint32_t kFocus = 0x10;
-constexpr uint32_t kUnfocus = 0x14;
 
 std::string g_loading;  // our page the manager is making
 int g_buttons = 0;                // the Options page's buttons read
@@ -266,8 +252,8 @@ uint32_t ReadLine(X86Context& ctx, uint32_t page, const std::string& line) {
 // the page's combos, in their rows' order
 std::vector<uint32_t> Combos(uint32_t page) {
     std::vector<uint32_t> out;
-    for (uint32_t i = 0; i < R32(page + kWidgetCount); i++) {
-        uint32_t widget = R32(page + kWidgets + i * 4);
+    for (uint32_t i = 0; i < R32(page + kPageWidgetCount); i++) {
+        uint32_t widget = R32(page + kPageWidgets + i * 4);
         if (widget && R32(widget + kWidgetKind) == kCombo) out.push_back(widget);
     }
     return out;
@@ -307,23 +293,18 @@ void ShowValues(uint32_t page) {
 
 // the focused widget's place among the combos, -1 for none
 int FocusedCombo(uint32_t page, const std::vector<uint32_t>& combos) {
-    uint32_t focused = R32(page + kFocused);
-    uint32_t widget = focused < R32(page + kWidgetCount) ? R32(page + kWidgets + focused * 4) : 0;
+    uint32_t focused = R32(page + kPageFocused);
+    uint32_t widget = focused < R32(page + kPageWidgetCount) ? R32(page + kPageWidgets + focused * 4) : 0;
     auto it = std::find(combos.begin(), combos.end(), widget);
     return widget && it != combos.end() ? int(it - combos.begin()) : -1;
 }
 
-void CallSlot(X86Context& ctx, uint32_t widget, uint32_t slot, std::initializer_list<uint32_t> args) {
-    ctx.ecx = widget;
-    CallGuest(ctx, R32(R32(widget) + slot), args);
-}
-
 void UpdateFocus(X86Context& ctx, uint32_t page, uint32_t widget) {
-    uint32_t focused = R32(page + kFocused);
-    if (focused < R32(page + kWidgetCount)) CallSlot(ctx, R32(page + kWidgets + focused * 4), kUnfocus, {});
+    uint32_t focused = R32(page + kPageFocused);
+    if (focused < R32(page + kPageWidgetCount)) CallSlot(ctx, R32(page + kPageWidgets + focused * 4), kUnfocus, {});
     CallSlot(ctx, widget, kFocus, {0});
-    for (uint32_t i = 0; i < R32(page + kWidgetCount); i++) {
-        if (R32(page + kWidgets + i * 4) == widget) W32(page + kFocused, i);
+    for (uint32_t i = 0; i < R32(page + kPageWidgetCount); i++) {
+        if (R32(page + kPageWidgets + i * 4) == widget) W32(page + kPageFocused, i);
     }
 }
 
@@ -332,17 +313,17 @@ void UpdateFocus(X86Context& ctx, uint32_t page, uint32_t widget) {
 void UpdateScroll(X86Context& ctx, uint32_t page, const std::vector<uint32_t>& combos, int before, size_t rows) {
     size_t shown = combos.size();
     if (rows <= shown || before < 0) return;
-    uint32_t pressed = R32(page + kPressed);
+    uint32_t pressed = R32(page + kPagePressed);
     bool first = before == 0;
     bool last = size_t(before) == shown - 1;
-    if ((pressed & kUp) && first) {
+    if ((pressed & kButtonUp) && first) {
         if (g_scroll == 0) {
             g_scroll = rows - shown;
             return;
         }
         g_scroll--;
         UpdateFocus(ctx, page, combos[0]);
-    } else if ((pressed & kDown) && last) {
+    } else if ((pressed & kButtonDown) && last) {
         if (g_scroll + shown == rows) {
             g_scroll = 0;
             return;
@@ -472,10 +453,10 @@ X86_FUNC(sub_MenuPageInput) {
     int focused = FocusedCombo(page, combos);
     if (focused >= 0) {
         size_t r = g_scroll + size_t(focused);
-        uint32_t pressed = R32(page + kPressed);
-        int step = ((pressed & kRight) ? 1 : 0) - ((pressed & kLeft) ? 1 : 0);
+        uint32_t pressed = R32(page + kPagePressed);
+        int step = ((pressed & kButtonRight) ? 1 : 0) - ((pressed & kButtonLeft) ? 1 : 0);
         if (step) app::StepPanelRow(panel_page, section, r, step);
-        if (pressed & kConfirm) app::PressPanelRow(panel_page, section, r, 0);
+        if (pressed & kButtonA) app::PressPanelRow(panel_page, section, r, 0);
         if (pressed & kButtonX) app::PressPanelRow(panel_page, section, r, 1);
     }
     ShowValues(page);

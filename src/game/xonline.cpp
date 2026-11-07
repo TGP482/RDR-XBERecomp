@@ -2,7 +2,10 @@
 // fails with XONLINE_E_NOT_INITIALIZED. The game's Live UI start needs it: answer as a console with no stored accounts.
 #include <cstring>
 
+#include "game/swui.h"
 #include "xdk/hle.h"
+
+using namespace swui;
 
 namespace {
 
@@ -13,8 +16,6 @@ constexpr hle::Va kFrontPressedReturn = SYM(FrontPressedReturn);
 constexpr uint32_t kFrontPage = 0x708;
 constexpr uint32_t kBook = 1;
 constexpr uint32_t kJournal = 3;
-constexpr uint32_t kButtonX = 0x4000000;
-constexpr uint32_t kButtonY = 0x8000000;
 // pause page: its Xbox Live button; a widget's active slot, thiscall(widget, active) ret 4
 constexpr uint32_t kPauseLiveButton = 0x458;
 constexpr uint32_t kSetActive = 0x4C;

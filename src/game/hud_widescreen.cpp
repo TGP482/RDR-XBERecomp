@@ -14,19 +14,19 @@
 #include "game/boot.h"
 #include "game/load_show.h"
 #include "game/prompts.h"
+#include "game/swui.h"
 #include "game/watermark.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
+using namespace swui;
 
 namespace {
 
 constexpr hle::Va kFrontendButtonsVtable = SYM(FrontendButtonsVtable);  // swuiPageFrontendButtons, the button prompts
 constexpr hle::Va kWarningFrontendVtable = SYM(WarningFrontendVtable);  // the front end's warning popups (new game over a save)
 constexpr hle::Va kDifficultyVtable = SYM(DifficultyVtable);       // difficultyselect, the new game's NORMAL / HARD box
-// a swui page's widgets and their count; the IPU background image's vtable and texture
-constexpr uint32_t kPageWidgets = 0x40;
-constexpr uint32_t kPageWidgetCount = 0x298;
+// the IPU background image's vtable and texture
 constexpr hle::Va kImageVtable = SYM(ImageVtable);
 constexpr uint32_t kImageTexture = 0x114;
 constexpr float kSide = 1.0f / 3;  // clip space: an element centred past this goes to its side

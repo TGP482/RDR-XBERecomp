@@ -7,16 +7,17 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
-#include <initializer_list>
 #include <limits>
 #include <vector>
 
 #include "core/input.h"
 #include "d3d/pick.h"
 #include "game/load_show.h"
+#include "game/swui.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
+using namespace swui;
 
 namespace {
 
@@ -24,22 +25,16 @@ constexpr float kPageWidth = 640.0f;
 constexpr float kPageHeight = 448.0f;
 constexpr float kMaxRow = 40.0f;  // a row reaches the next one's top, at most this far
 constexpr float kSameRow = 1.0f;  // tops this close share a row, side by side
-// page: active, its widgets, their count, the focused one
+// page: active
 constexpr uint32_t kActive = 0x3D;
-constexpr uint32_t kWidgets = 0x40;
-constexpr uint32_t kWidgetCount = 0x298;
-constexpr uint32_t kFocused = 0x31C;
-constexpr uint32_t kMaxWidgets = (kWidgetCount - kWidgets) / 4;
-// widget: kind, place and the offset drawn from it, focusable when both are set, its focus(quiet) and unfocus slots
-constexpr uint32_t kKind = 0x48;
+constexpr uint32_t kMaxWidgets = (kPageWidgetCount - kPageWidgets) / 4;
+// widget: place and the offset drawn from it, focusable when both are set
 constexpr uint32_t kLeft = 0x4C;
 constexpr uint32_t kTop = 0x50;
 constexpr uint32_t kOffsetX = 0x58;
 constexpr uint32_t kOffsetY = 0x5C;
 constexpr uint32_t kSelectable = 0xD8;
 constexpr uint32_t kEnabled = 0xE6;
-constexpr uint32_t kFocus = 0x10;
-constexpr uint32_t kUnfocus = 0x14;
 // a slider has no place of its own: its linked widgets, its title first
 constexpr uint32_t kSlider = 0xF;
 constexpr uint32_t kSliderLinks = 0x114;
@@ -122,15 +117,15 @@ bool UpdateSeen(uint32_t page, float x, float y) {
 // the widget that places the row: a slider's title, else the widget itself
 uint32_t Placed(uint32_t widget) {
     uint32_t links = R32(widget + kSliderLinks);
-    bool slider = R32(widget + kKind) == kSlider && links && G<uint16_t>(widget + kSliderLinkCount);
+    bool slider = R32(widget + kWidgetKind) == kSlider && links && G<uint16_t>(widget + kSliderLinkCount);
     return slider ? R32(links) : widget;
 }
 
 std::vector<Row> Rows(uint32_t page) {
     std::vector<Row> rows;
-    uint32_t count = std::min(R32(page + kWidgetCount), kMaxWidgets);
+    uint32_t count = std::min(R32(page + kPageWidgetCount), kMaxWidgets);
     for (uint32_t i = 0; i < count; i++) {
-        uint32_t widget = R32(page + kWidgets + i * 4);
+        uint32_t widget = R32(page + kPageWidgets + i * 4);
         if (!widget || !G<uint8_t>(widget + kSelectable) || !G<uint8_t>(widget + kEnabled)) continue;
         uint32_t placed = Placed(widget);
         float left = G<float>(placed + kLeft) + G<float>(placed + kOffsetX);
@@ -165,11 +160,6 @@ int Under(uint32_t page, float x, float y) {
     return under;
 }
 
-void CallSlot(X86Context& ctx, uint32_t widget, uint32_t slot, std::initializer_list<uint32_t> args) {
-    ctx.ecx = widget;
-    CallGuest(ctx, R32(R32(widget) + slot), args);
-}
-
 // the cursor's place on the page, false off it; a book page's from the renderer, which follows the cursor
 bool CursorOnPage(uint32_t page, float& x, float& y) {
     if (!input::MenuCursorAt(x, y)) return false;
@@ -189,13 +179,13 @@ void UpdateHover(X86Context& ctx, uint32_t page) {
     float y = 0.0f;
     if (!CursorOnPage(page, x, y) || !UpdateSeen(page, x, y)) return;
     int hovered = Under(page, x, y);
-    int focused = int(R32(page + kFocused));
+    int focused = int(R32(page + kPageFocused));
     if (hovered < 0 || hovered == focused) return;
-    if (focused >= 0 && uint32_t(focused) < R32(page + kWidgetCount)) {
-        CallSlot(ctx, R32(page + kWidgets + uint32_t(focused) * 4), kUnfocus, {});
+    if (focused >= 0 && uint32_t(focused) < R32(page + kPageWidgetCount)) {
+        CallSlot(ctx, R32(page + kPageWidgets + uint32_t(focused) * 4), kUnfocus, {});
     }
-    CallSlot(ctx, R32(page + kWidgets + uint32_t(hovered) * 4), kFocus, {0});
-    W32(page + kFocused, uint32_t(hovered));
+    CallSlot(ctx, R32(page + kPageWidgets + uint32_t(hovered) * 4), kFocus, {0});
+    W32(page + kPageFocused, uint32_t(hovered));
 }
 
 // the save popup's movie, loaded at +0x28; a movie's player, the player's root object and movie, the movie's height

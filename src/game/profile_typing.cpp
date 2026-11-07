@@ -5,18 +5,18 @@
 #include <string>
 
 #include "core/input.h"
+#include "game/swui.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
+using namespace swui;
 
 namespace {
 
-// profile page: typing a name, the grid's row and column, the pad's pressed buttons
+// profile page: typing a name, the grid's row and column
 constexpr uint32_t kNaming = 0x44E;
 constexpr uint32_t kGridRow = 0x46C;
 constexpr uint32_t kGridColumn = 0x470;
-constexpr uint32_t kPressed = 0x308;
-constexpr uint32_t kButtonA = 0x1000000;
 // the grid's columns; End's place in "ABCDEFGHIJKLMNOPQRSTUVWXYZ<>" then End
 constexpr hle::Va kGridColumns = SYM(GridColumns);
 constexpr uint32_t kGridEnd = 28;
@@ -33,7 +33,7 @@ void PressEnd(uint32_t page) {
     uint32_t columns = std::max(R32(kGridColumns), 1u);
     W32(page + kGridRow, kGridEnd / columns);
     W32(page + kGridColumn, kGridEnd % columns);
-    W32(page + kPressed, R32(page + kPressed) | kButtonA);
+    W32(page + kPagePressed, R32(page + kPagePressed) | kButtonA);
 }
 
 void TypeName(X86Context& ctx, uint32_t page) {
