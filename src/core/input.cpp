@@ -1,4 +1,4 @@
-// controllers through SDL, keyboard and raw mouse merged into port 0
+// controllers through SDL, keyboard and raw mouse merged into the port PLAYER 1 to 4 give them
 #include "core/input.h"
 
 #include <algorithm>
@@ -114,12 +114,12 @@ HWND g_hwnd = nullptr;
 std::atomic<int> g_dx{0};
 std::atomic<int> g_dy{0};
 
-// While the keyboard or mouse was used after the pad's last new press, port 0's controller does not rumble. Only new
-// pad presses count, so a drifting stick never takes over from the keyboard.
+// While the keyboard or mouse was used after the pad's last new press, the keyboard port's controller does not rumble.
+// Only new pad presses count, so a drifting stick never takes over from the keyboard.
 std::atomic<uint64_t> g_keyboard_ms{0};
 std::atomic<uint64_t> g_pad_ms{0};
 std::atomic<uint32_t> g_pad_held{0};
-std::atomic<bool> g_rumbling{false};  // port 0's motors were last set running
+std::atomic<bool> g_rumbling{false};  // the keyboard port's motors were last set running
 
 // A name being typed: the keys that type press no action and Enter and Backspace leave A and B alone; the game side
 // keeps it on each frame it reads the typing
@@ -651,7 +651,7 @@ void Clip() {
 
 constexpr int kStickActive = 8000;  // a stick this far off centre counts as held
 
-// the pad on port 0: a new press takes over from the keyboard
+// the pad on the keyboard's port: a new press takes over from the keyboard
 void NotePadHeld(const Pad& p) {
     // the mask: buttons bits 0 to 7, analog 8 to 15, the stick axes 16 to 19
     uint32_t held = p.buttons;
@@ -661,10 +661,13 @@ void NotePadHeld(const Pad& p) {
     if (held & ~g_pad_held.exchange(held)) g_pad_ms = NowMs();
 }
 
-void SetMotors(int port, uint16_t left, uint16_t right) {
+void SetMotors(int slot, uint16_t left, uint16_t right) {
     std::lock_guard lock(g_lock);
-    if (port >= 0 && port < 4 && g_pads[port]) SDL_RumbleGamepad(g_pads[port], left, right, 0);
+    if (slot >= 0 && slot < 4 && g_pads[slot]) SDL_RumbleGamepad(g_pads[slot], left, right, 0);
 }
+
+// the controller slot on a guest port, -1 for none
+int PadSlot(int port) { return port >= 0 && port < app::kPlayers ? app::Rdr().players[port].pad : -1; }
 
 }  // namespace
 
@@ -699,21 +702,37 @@ void StartMouse(void* hwnd) {
     RegisterRawInputDevices(&mouse, 1, sizeof(mouse));
 }
 
+int KeyboardPort() {
+    for (int port = 0; port < app::kPlayers; port++) {
+        if (app::Rdr().players[port].keyboard) return port;
+    }
+    return -1;
+}
+
+int LookPort() { return std::max(KeyboardPort(), 0); }
+
+bool PadConnected(int slot) {
+    std::lock_guard lock(g_lock);
+    UpdatePads();
+    return slot >= 0 && slot < 4 && g_pads[slot];
+}
+
 Pad Poll(int port) {
     Pad p;
+    int slot = PadSlot(port);
     {
         std::lock_guard lock(g_lock);
         UpdatePads();
-        if (SDL_Gamepad* pad = port >= 0 && port < 4 ? g_pads[port] : nullptr) {
+        if (SDL_Gamepad* pad = slot >= 0 && slot < 4 ? g_pads[slot] : nullptr) {
             ReadPad(pad, p);
             Rebind(p, port);
         }
     }
-    if (port == 0) {
+    if (port == KeyboardPort()) {
         if (p.connected) NotePadHeld(p);
         // a motor the game left running when the keyboard took over, the game may not set it again
         if (g_rumbling && KeyboardLast()) {
-            SetMotors(0, 0, 0);
+            SetMotors(slot, 0, 0);
             g_rumbling = false;
         }
         p.connected = true;
@@ -742,18 +761,19 @@ uint16_t HeldOnAnyController() {
     return held;
 }
 
-// the motors run until set again; port 0 is still while the keyboard and mouse were used last
+// the motors run until set again; the keyboard's port is still while the keyboard and mouse were used last
 void Rumble(int port, uint16_t left, uint16_t right) {
     if (app::kGame.rumble) app::kGame.rumble(port, left, right);
-    if (port == 0 && KeyboardLast()) {
+    bool keyboard = port == KeyboardPort();
+    if (keyboard && KeyboardLast()) {
         left = 0;
         right = 0;
     }
-    if (port == 0) g_rumbling = left || right;
+    if (keyboard) g_rumbling = left || right;
     uint32_t strength = app::Rdr().vibration_strength;
     left = uint16_t(std::min<uint32_t>(left * strength / 100, 0xFFFF));
     right = uint16_t(std::min<uint32_t>(right * strength / 100, 0xFFFF));
-    SetMotors(port, left, right);
+    SetMotors(PadSlot(port), left, right);
 }
 
 void SetBlocked(bool blocked) {
@@ -844,7 +864,7 @@ bool TakeMouse(float& dx, float& dy) {
     return true;
 }
 
-bool KeyboardActive() { return g_keyboard_ms >= g_pad_ms; }
+bool KeyboardActive() { return KeyboardPort() >= 0 && g_keyboard_ms >= g_pad_ms; }
 
 const Action* Actions(size_t* count) {
     static const auto list = [] {

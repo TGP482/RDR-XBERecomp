@@ -16,8 +16,12 @@ struct Pad {
 void Init();  // window thread, before boot; the game code window starts it earlier
 void StartMouse(void* hwnd);  // raw mouse input for the game window
 uint16_t HeldOnAnyController();  // face buttons as XINPUT_GAMEPAD_A/B/X/Y masks, GameInfo::pad left out
-// The controller on that port, then GameInfo::pad. The keyboard and mouse merge into port 0, which stays connected.
+// The controller F10 > PLAYER 1 to 4 puts on that port, then GameInfo::pad. The keyboard and mouse merge into the pad
+// of their port, which stays connected.
 Pad Poll(int port);
+int KeyboardPort();  // the port the keyboard and mouse are on, -1 for none
+int LookPort();      // the port the mouse and gyro turn: the keyboard's, else 0
+bool PadConnected(int slot);  // controller slot 0-3
 void Rumble(int port, uint16_t left, uint16_t right);
 void SetBlocked(bool blocked);  // the settings panel takes the input
 void SetLoading(bool loading);  // a loading screen is up: the cursor hides

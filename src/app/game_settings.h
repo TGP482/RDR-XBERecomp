@@ -11,6 +11,13 @@ namespace app {
 
 constexpr uint32_t kGameFov = 63;  // the game camera's own, horizontal degrees on a 4:3 frame
 
+// what a player's controller port has plugged in: the keyboard and mouse, a controller, or both
+struct Port {
+    bool keyboard = false;
+    int pad = -1;  // controller slot 0-3, -1 for none
+};
+constexpr int kPlayers = 4;
+
 struct RdrSettings {
     std::string monitor;  // its device name, \\.\DISPLAY2; empty the primary
     bool fps_counter = false;
@@ -45,6 +52,8 @@ struct RdrSettings {
     gyro::Settings gyro;
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default
     std::map<std::string, std::string> pad_buttons;  // controller action id to button name, absent is the stock one
+    // guest ports 0 to 3; a device sits on one port only, player 1 is never empty
+    Port players[kPlayers] = {{true, 0}, {false, 1}, {false, 2}, {false, 3}};
 };
 
 RdrSettings& Rdr();

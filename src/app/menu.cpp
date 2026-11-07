@@ -83,6 +83,10 @@ enum class RowId {
     Language,
     SkipIntros,
     AudioOutput,
+    Player1,
+    Player2,
+    Player3,
+    Player4,
     TextureReplacement,
     TextureDumping,
     DumpFormat,
@@ -139,6 +143,11 @@ constexpr Row kSettingsRows[] = {
     {RowId::PauseOnFocusLoss, "PAUSE ON FOCUS LOSS"},
     {RowId::Language, "LANGUAGE"},
     {RowId::AudioOutput, "AUDIO MODE"},
+    {RowId::Heading, "INPUT DEVICES"},
+    {RowId::Player1, "PLAYER 1"},
+    {RowId::Player2, "PLAYER 2"},
+    {RowId::Player3, "PLAYER 3"},
+    {RowId::Player4, "PLAYER 4"},
     {RowId::Heading, "TEXTURES"},
     {RowId::TextureReplacement, "TEXTURE REPLACEMENT"},
     {RowId::TextureDumping, "TEXTURE DUMPING"},
@@ -454,8 +463,69 @@ void StepGyro(RowId id, int step) {
     }
 }
 
+// Input devices: each player's guest port, a device on one port only
+
+// the keyboard with each controller, alone, then each controller alone, then nothing (refused for player 1)
+constexpr Port kPortChoices[] = {{true, 0},  {true, 1},  {true, 2},  {true, 3},  {true, -1},
+                                 {false, 0}, {false, 1}, {false, 2}, {false, 3}, {false, -1}};
+
+// the player a row sets, -1 for any other row
+int PlayerOf(RowId id) {
+    int player = int(id) - int(RowId::Player1);
+    return player >= 0 && player < kPlayers ? player : -1;
+}
+
+std::string PortText(const Port& p) {
+    std::string pad = "CONTROLLER " + std::to_string(p.pad + 1);
+    if (p.keyboard && p.pad >= 0) return "KEYBOARD + " + pad;
+    if (p.keyboard) return "KEYBOARD";
+    return p.pad >= 0 ? pad : "NOT CONNECTED";
+}
+
+bool SamePort(const Port& a, const Port& b) { return a.keyboard == b.keyboard && a.pad == b.pad; }
+bool Empty(const Port& p) { return !p.keyboard && p.pad < 0; }
+
+// a port's devices without those a choice takes
+Port Without(Port p, const Port& choice) {
+    if (choice.keyboard) p.keyboard = false;
+    if (choice.pad >= 0 && choice.pad == p.pad) p.pad = -1;
+    return p;
+}
+
+// The choice's devices come off the other players. The front end and single player read player 1, so a choice that
+// leaves it empty hands it the chooser's old devices, and is refused when that leaves none.
+bool SetPlayer(int player, const Port& choice) {
+    Port (&players)[kPlayers] = Rdr().players;
+    Port next[kPlayers];
+    for (int i = 0; i < kPlayers; i++) next[i] = i == player ? choice : Without(players[i], choice);
+    if (Empty(next[0]) && player != 0) next[0] = Without(players[player], choice);
+    if (Empty(next[0])) return false;
+    std::copy(std::begin(next), std::end(next), std::begin(players));
+    return true;
+}
+
+// to the next choice SetPlayer takes, an unplugged controller left out
+void StepPlayer(int player, int step) {
+    constexpr int kCount = int(std::size(kPortChoices));
+    const Port current = Rdr().players[player];
+    int i = 0;
+    for (int k = 0; k < kCount; k++) {
+        if (SamePort(kPortChoices[k], current)) i = k;
+    }
+    for (int tries = 1; tries < kCount; tries++) {
+        i = Wrap(i, step, kCount);
+        const Port& c = kPortChoices[i];
+        if (c.pad >= 0 && !input::PadConnected(c.pad)) continue;
+        if (SetPlayer(player, c)) return;
+    }
+}
+
 void Step(RowId id, int step, Settings& s) {
     if (id == RowId::HdrOutput && !HdrDisplay()) return;
+    if (int player = PlayerOf(id); player >= 0) {
+        StepPlayer(player, step);
+        return;
+    }
     if (bool* flag = ToggleFlag(s, id)) {
         *flag = !*flag;
         return;
@@ -529,6 +599,7 @@ std::string GyroText(RowId id) {
 
 std::string Text(RowId id, Settings& s) {
     if (id == RowId::HdrOutput && !HdrDisplay()) return "NOT SUPPORTED";
+    if (int player = PlayerOf(id); player >= 0) return PortText(Rdr().players[player]);
     if (bool* flag = ToggleFlag(s, id)) return *flag ? "ON" : "OFF";
     if (float* v = Sensitivity(id)) {
         if (id == RowId::GyroSensitivity) return SensitivityText(*v);
@@ -649,6 +720,7 @@ void RestoreDefaults(int page) {
     r.skip_intros = fresh.skip_intros;
     r.language = fresh.language;
     r.audio_output = fresh.audio_output;
+    std::copy(std::begin(fresh.players), std::end(fresh.players), std::begin(r.players));
     audio::SetOutputMode(r.audio_output);
     g_display_held = false;
     ShowOnMonitor();

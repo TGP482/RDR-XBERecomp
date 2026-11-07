@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <string>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -52,6 +53,46 @@ void SaveGyro(toml::table& t, const gyro::Settings& g) {
     t.insert("gyro_button", int64_t(g.button));
     t.insert("gyro_button_mode", int64_t(g.button_mode));
     t.insert("gyro_recenter_button", int64_t(g.recenter_button));
+}
+
+const char* const kPlayerKeys[kPlayers] = {"player1", "player2", "player3", "player4"};
+
+// "keyboard", "controllerN", both joined by '+', or "none"
+std::string PortName(const Port& p) {
+    std::string name = p.keyboard ? "keyboard" : "";
+    if (p.pad >= 0) name += (name.empty() ? "controller" : "+controller") + std::to_string(p.pad + 1);
+    return name.empty() ? "none" : name;
+}
+
+Port ParsePort(const std::string& name, Port fallback) {
+    Port p;
+    p.keyboard = name.find("keyboard") != std::string::npos;
+    size_t at = name.find("controller");
+    constexpr size_t kDigit = 10;  // after "controller"
+    if (at != std::string::npos && at + kDigit < name.size()) {
+        int n = name[at + kDigit] - '0';
+        if (n >= 1 && n <= 4) p.pad = n - 1;
+    }
+    return p.keyboard || p.pad >= 0 || name == "none" ? p : fallback;
+}
+
+// a hand edited file: a device the earlier player has comes off the later one; an empty player 1 swaps with the first
+// player who has a device
+void LoadPlayers(const toml::table& t, Port (&players)[kPlayers]) {
+    for (int i = 0; i < kPlayers; i++) {
+        Port p = ParsePort(t[kPlayerKeys[i]].value_or(PortName(players[i])), players[i]);
+        for (int j = 0; j < i; j++) {
+            if (players[j].keyboard) p.keyboard = false;
+            if (p.pad == players[j].pad) p.pad = -1;
+        }
+        players[i] = p;
+    }
+    if (players[0].keyboard || players[0].pad >= 0) return;
+    for (Port& p : players) {
+        if (!p.keyboard && p.pad < 0) continue;
+        std::swap(players[0], p);
+        return;
+    }
 }
 
 }  // namespace
@@ -129,6 +170,7 @@ void LoadRdr(const void* table) {
             if (auto v = value.value<std::string>()) s.keys[std::string(id.str())] = *v;
         }
     }
+    LoadPlayers(t, s.players);
     if (const toml::table* pads = t["controller"].as_table()) {
         for (auto&& [id, value] : *pads) {
             if (auto v = value.value<std::string>()) s.pad_buttons[std::string(id.str())] = *v;
@@ -171,6 +213,7 @@ void SaveRdr(void* table) {
     toml::table keys;
     for (const auto& [id, value] : s.keys) keys.insert(id, value);
     t.insert("keys", keys);
+    for (int i = 0; i < kPlayers; i++) t.insert(kPlayerKeys[i], PortName(s.players[i]));
     toml::table pads;
     for (const auto& [id, value] : s.pad_buttons) pads.insert(id, value);
     t.insert("controller", pads);

@@ -154,14 +154,17 @@ bool Aiming(uint32_t player) {
     return aim == 0 || aim == 2;
 }
 
-bool PortZero(uint32_t player) {
+// the player reads that console port's pad
+bool OnPort(uint32_t player, int port) {
     uint32_t pad = R32(player + kPlayerPad);
-    return pad && R32(pad + kPadPort) == 0;
+    return pad && int(R32(pad + kPadPort)) == port;
 }
+
+bool MouseTurns(uint32_t player) { return OnPort(player, input::LookPort()); }
 
 // the player's aim may not soft lock: the keyboard and mouse were used last, or AIM ASSIST is off
 bool NoAimAssist(uint32_t player) {
-    return !app::Rdr().aim_assist || (PortZero(player) && input::KeyboardActive());
+    return !app::Rdr().aim_assist || (OnPort(player, input::KeyboardPort()) && input::KeyboardActive());
 }
 
 // lets go of a soft lock once it may not hold, as the targeting update does
@@ -249,8 +252,8 @@ void UpdateDeadZones() {
     app::GameDeadZone() = g_left_zone.game;
 }
 
-// Out of aim the turn waits for the next tick of port 0's camera machine. The follow cameras (on foot, riding, the
-// wagon) take the yaw into their bearing and the pitch into the tilt they read; the mounted gun takes both.
+// Out of aim the turn waits for the next tick of the mouse player's camera machine. The follow cameras (on foot,
+// riding, the wagon) take the yaw into their bearing and the pitch into the tilt they read; the mounted gun takes both.
 // A stick right lowers their angles: the game's yaw curve (0x14DB20) flips the stick's sign.
 struct CameraTurn {
     uint32_t machine = 0;
@@ -394,7 +397,7 @@ X86_FUNC(sub_00143350) {
     uint32_t player = ctx.ecx;
     uint32_t stick = R32(ctx.esp + 4);
     bool aiming = Aiming(player);
-    if (PortZero(player)) {
+    if (MouseTurns(player)) {
         input::SetAiming(aiming);
         if (aiming) {
             DropSoftLock(ctx, player);
@@ -411,7 +414,7 @@ X86_FUNC(sub_00143350) {
 X86_EXTERN_FUNC(__imp__sub_00147630);
 X86_FUNC(sub_00147630) {
     uint32_t player = ctx.ecx;
-    if (PortZero(player)) {
+    if (MouseTurns(player)) {
         input::SetAiming(true);
         Turn t = TakeTurn();
         AddFloat(player + kLookYaw, t.x);
@@ -440,20 +443,20 @@ X86_EXTERN_FUNC(__imp__sub_0013FCF0);
 X86_FUNC(sub_0013FCF0) {
     uint32_t player = ctx.ecx;
     __imp__sub_0013FCF0(ctx, base);
-    if (PortZero(player)) LatchCameraTurn(player);
+    if (MouseTurns(player)) LatchCameraTurn(player);
 }
 
 // the camera machine's tick, thiscall(machine, tunables) ret 4, from the rig's update; a turn its cameras leave is
 // dropped, as is one no tick came for since the last pad update
 X86_EXTERN_FUNC(__imp__sub_0029C670);
 X86_FUNC(sub_0029C670) {
-    bool port_zero = ctx.ecx && ctx.ecx == g_camera.machine;
-    g_camera.ticking = port_zero;
+    bool mouse_camera = ctx.ecx && ctx.ecx == g_camera.machine;
+    g_camera.ticking = mouse_camera;
     g_camera.followed = false;
-    if (port_zero) ApplyCameraTilt();
+    if (mouse_camera) ApplyCameraTilt();
     __imp__sub_0029C670(ctx, base);
     g_camera.ticking = false;
-    if (!port_zero) return;
+    if (!mouse_camera) return;
     g_camera.ticked = true;
     g_camera.following = g_camera.followed;
     g_camera.clamp = g_camera.ticked_clamp;
