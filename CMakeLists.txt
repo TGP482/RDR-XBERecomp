@@ -33,10 +33,30 @@ list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/(xdk/dsound|xdk/d3d8|gpu/d3d12|g
 set_source_files_properties(src/core/input.cpp src/core/gyro.cpp src/app/game_code.cpp
                             PROPERTIES INCLUDE_DIRECTORIES "${sdl3_SOURCE_DIR}/include")
 
-# partitions as xbe_symbols wrote them into config/game.toml
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS config/game.toml)
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/config/game.toml)
-    file(STRINGS config/game.toml GAME_PARTITIONS REGEX "^partitions *=")
+# the release in assets builds with its own config, the one whose entry point is the xbe's (retail key)
+set(GAME_CONFIG game.toml)
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/assets/default.xbe)
+    file(READ assets/default.xbe XBE_ENTRY OFFSET 296 LIMIT 4 HEX)
+    string(REGEX REPLACE "(..)(..)(..)(..)" "0x\\4\\3\\2\\1" XBE_ENTRY "${XBE_ENTRY}")
+    math(EXPR XBE_ENTRY "${XBE_ENTRY} ^ 0xA8FC57AB")
+    file(GLOB RELEASE_CONFIGS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/config CONFIGURE_DEPENDS config/*.toml)
+    foreach(config ${RELEASE_CONFIGS})
+        file(STRINGS config/${config} CONFIG_ENTRY REGEX "^entry *=")
+        string(REGEX MATCH "0x[0-9A-Fa-f]+" CONFIG_ENTRY "${CONFIG_ENTRY}")
+        if(CONFIG_ENTRY)
+            math(EXPR CONFIG_ENTRY "${CONFIG_ENTRY}")
+            if(CONFIG_ENTRY EQUAL XBE_ENTRY)
+                set(GAME_CONFIG ${config})
+            endif()
+        endif()
+    endforeach()
+endif()
+message(STATUS "Game config: ${GAME_CONFIG}")
+
+# partitions as xbe_symbols wrote them into the config
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS config/${GAME_CONFIG})
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/config/${GAME_CONFIG})
+    file(STRINGS config/${GAME_CONFIG} GAME_PARTITIONS REGEX "^partitions *=")
     string(REGEX MATCH "[0-9]+" GAME_PARTITIONS "${GAME_PARTITIONS}")
 endif()
 # no config yet: build.bat writes it with xbe_symbols, the change reconfigures
@@ -45,4 +65,4 @@ if(NOT GAME_PARTITIONS)
 endif()
 
 # target name = GAME_EXE in build.bat, xbe = GAME_XBE
-add_xbe_image(RDR default.xbe game.toml ${GAME_PARTITIONS} game)
+add_xbe_image(RDR default.xbe ${GAME_CONFIG} ${GAME_PARTITIONS} game)
