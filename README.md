@@ -40,13 +40,10 @@ The latest version of [RDR-XBERecomp](https://github.com/TGP482/RDR-XBERecomp/re
 - **Texture Dumping** - Saves every texture the game uses into the textures\dumps folder beside the exe.
 - **Dump Format** - Choose between PNG or DDS, which keeps the original compression and mipmaps.
 
-### Mouse and Keyboard
-Full keyboard and mouse support with raw input, adjustable sensitivity, inverted look and rebindable controls.
-
-### Controller
-Controller support through SDL3 for Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
-- **Aim Sensitivity** - Adjusts the horizontal and vertical aim sensitivity beyond the in-game sliders.
-- **Gyro Aiming** - Enables gyro aiming on controllers with a gyroscope.
+### Input
+- **Mouse and Keyboard** - Full keyboard and mouse support with raw input.
+- **Controller** - Controller with SDL3 support.
+- **Gyro Aiming** - Adds gyro aiming for controllers with motion sensors, such as the DualSense, DualShock 4 and Switch Pro Controller. Works together with the right stick.
 
 ### General
 - **Skip Intro** - Skips the intro logos.

@@ -27,9 +27,11 @@ struct FlashButton {
     const char* name;
     input::PromptButton button;
     const char* parent = nullptr;  // the clip it must be in, where the name alone is not a button's
+    bool alone = false;            // a button only where the movie draws no Xbox named one, else the PS2 picture
 };
 constexpr FlashButton kFlashButtons[] = {
     {"acceptMainXbox", input::kPromptA},
+    {"acceptMain", input::kPromptA, nullptr, true},  // the end of game unlock screen's
     {"canXbox", input::kPromptB},
     {"xButtonXbox", input::kPromptX},
     {"yButtonXbox", input::kPromptY},
@@ -97,6 +99,7 @@ struct FlashKey {
     std::string text;
     uint32_t colour;
     uint32_t label = 0;  // the text object it labels
+    bool alone = false;
 };
 
 // a text's glyphs on screen
@@ -363,7 +366,7 @@ X86_FUNC(sub_001AC840) {
         else box.Add(Place(ctx, base, object));
         g_picture = nullptr;
         uint32_t alpha = Alpha(object);
-        if (!box.Empty() && alpha) g_keys.push_back({box, "(" + key + ")", alpha << 24 | 0xFFFFFFu});
+        if (!box.Empty() && alpha) g_keys.push_back({box, "(" + key + ")", alpha << 24 | 0xFFFFFFu, 0, button->alone});
         return;
     }
     if (boxable && keys && g_covered && !g_covered->empty()) {
@@ -394,6 +397,8 @@ X86_FUNC(sub_001ABEC0) {
     pictures.clear();
     std::vector<Spread> applied;
     applied.swap(spreads);
+    if (std::any_of(g_keys.begin(), g_keys.end(), [](const FlashKey& k) { return !k.alone; }))
+        std::erase_if(g_keys, [](const FlashKey& k) { return k.alone; });
     for (const FlashKey& key : g_keys) pictures.push_back(key.box);
     if (g_keys.empty()) return;
     uint32_t font = FindGameFont(ctx);
