@@ -260,7 +260,12 @@ X86_FUNC(sub_00067590) {
 // the load show's sun is about to take the console's 16:9 x squash (0.75): the 2D narrows to 4:3 already
 bool LoadShowSunRound(X86Context&, uint8_t*) { return true; }
 
-// the legal screen's picture (rdrlogoshot), 4:3, drawn over the whole screen
+// the screen's clear, cdecl(flags, colour, z, stencil)
+constexpr uint32_t kClear = 0x17D530;
+constexpr uint32_t kClearTarget = 0xF0;
+
+// the legal screen's picture (rdrlogoshot), 4:3, drawn over the whole screen; before a level the front end's last
+// frame is still there, so the sides clear black first
 X86_EXTERN_FUNC(__imp__sub_0005EB40);
 X86_FUNC(sub_0005EB40) {
     if (game::TitleHidden()) {
@@ -271,6 +276,7 @@ X86_FUNC(sub_0005EB40) {
         __imp__sub_0005EB40(ctx, base);
         return;
     }
+    if (app::Wide()) CallGuest(ctx, kClear, {kClearTarget, 0xFF000000u, 0, 0});
     xdk::BeginInlineSide(0, xdk::Fit::Whole);
     __imp__sub_0005EB40(ctx, base);
     xdk::EndInlineSide();
