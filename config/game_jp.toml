@@ -452,6 +452,7 @@ SoftLockSearchSecondPass                             = 0x142ED0
 SoundPageDraw                                        = 0x30450
 SoundPageOpen                                        = 0x30550
 StateMachineStep                                     = 0x5E9F0
+TextElementDraw                                      = 0x21BA0
 TitleScreens                                         = 0x17BA0
 TutorialControllerDraw                               = 0x1E0A10
 TutorialControllerMake                               = 0x1E08A0
