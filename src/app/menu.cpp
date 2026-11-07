@@ -1105,29 +1105,10 @@ static_assert(std::size(kPages) == kPanelPages);
 
 const char* PanelPageTitle(int page) { return kPages[page]; }
 
-namespace {
-
-bool BindHeading(const std::vector<Row>& rows, size_t i) {
-    return rows[i].id == RowId::Heading && i + 1 < rows.size() && rows[i + 1].id == RowId::Bind;
-}
-
-// the game's options list the key binds as one KEYBOARD page: the first of their headings starts it, the rest none
-const char* SectionTitle(const std::vector<Row>& rows, size_t i) {
-    if (rows[i].id != RowId::Heading) return nullptr;
-    if (!BindHeading(rows, i)) return rows[i].label;
-    for (size_t j = 0; j < i; j++) {
-        if (BindHeading(rows, j)) return nullptr;
-    }
-    return "KEYBOARD";
-}
-
-}  // namespace
-
 std::vector<std::string> PanelSections(int page) {
     std::vector<std::string> out;
-    std::vector<Row> rows = PageRows(page);
-    for (size_t i = 0; i < rows.size(); i++) {
-        if (const char* title = SectionTitle(rows, i)) out.push_back(title);
+    for (const Row& r : PageRows(page)) {
+        if (r.id == RowId::Heading) out.push_back(r.label);
     }
     return out;
 }
@@ -1141,8 +1122,8 @@ std::vector<Row> SectionRows(int page, size_t section) {
     size_t heading = 0;
     bool inside = false;
     for (size_t i = 0; i < rows.size(); i++) {
-        if (SectionTitle(rows, i)) inside = heading++ == section;
-        else if (inside && rows[i].id != RowId::Heading) out.push_back(rows[i]);
+        if (rows[i].id == RowId::Heading) inside = heading++ == section;
+        else if (inside) out.push_back(rows[i]);
     }
     return out;
 }
