@@ -20,10 +20,12 @@ uint16_t HeldOnAnyController();  // face buttons as XINPUT_GAMEPAD_A/B/X/Y masks
 Pad Poll(int port);
 void Rumble(int port, uint16_t left, uint16_t right);
 void SetBlocked(bool blocked);  // the settings panel takes the input
+void SetLoading(bool loading);  // a loading screen is up: the cursor hides
 
 // window thread
 void OnRawInput(void* handle);
-// the cursor shows over menus and the settings panel, in play it is hidden and kept in the window
+// the cursor shows over menus and the settings panel; in play it is hidden and kept in the window, on loading
+// screens just hidden
 bool CursorShown();
 // out of play, the cursor across and down the window from 0 to 1; false outside it, or not in the game's hands
 bool MenuCursorAt(float& x, float& y);

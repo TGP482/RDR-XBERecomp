@@ -106,6 +106,7 @@ void ReadPad(SDL_Gamepad* pad, Pad& p) {
 // Shared state
 
 std::atomic<bool> g_blocked{false};
+std::atomic<bool> g_loading{false};
 std::atomic<int> g_screen{int(Screen::Menu)};
 std::atomic<bool> g_aiming{false};
 HWND g_hwnd = nullptr;
@@ -620,6 +621,10 @@ void SetBlocked(bool blocked) {
     }
 }
 
+void SetLoading(bool loading) {
+    if (g_loading.exchange(loading) != loading) RefreshCursor();
+}
+
 void OnRawInput(void* handle) {
     RAWINPUT ri;
     UINT size = sizeof(ri);
@@ -638,14 +643,13 @@ void OnRawInput(void* handle) {
     g_dy += m.lLastY;
 }
 
-bool CursorShown() { return g_blocked || !InPlay() || GetForegroundWindow() != g_hwnd; }
+bool CursorShown() { return g_blocked || (!InPlay() && !g_loading) || GetForegroundWindow() != g_hwnd; }
 
 bool MenuCursorAt(float& x, float& y) {
     POINT p;
     RECT r;
-    if (!Active() || InPlay() || !GetCursorPos(&p) || !ScreenToClient(g_hwnd, &p) || !GetClientRect(g_hwnd, &r)) {
-        return false;
-    }
+    if (!Active() || InPlay() || g_loading) return false;
+    if (!GetCursorPos(&p) || !ScreenToClient(g_hwnd, &p) || !GetClientRect(g_hwnd, &r)) return false;
     if (p.x < 0 || p.y < 0 || p.x >= r.right || p.y >= r.bottom) return false;
     x = float(p.x) / float(r.right);
     y = float(p.y) / float(r.bottom);

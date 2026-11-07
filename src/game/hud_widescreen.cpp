@@ -9,6 +9,7 @@
 #include "app/app.h"
 #include "app/display.h"
 #include "app/game_settings.h"
+#include "core/input.h"
 #include "d3d/inline_shift.h"
 #include "game/boot.h"
 #include "game/load_show.h"
@@ -336,9 +337,13 @@ static int ControllerSide(uint32_t controller) {
 }
 
 // the tutorial's controller, thiscall(controller), vtable 0x3F5850 slot 6: the game keeps its shape on 16:9 but lays
-// it out from the middle, so it moves against the side of where it is going
+// it out from the middle, so it moves against the side of where it is going; not drawn on the keyboard and mouse
 X86_EXTERN_FUNC(__imp__sub_001E03C0);
 X86_FUNC(sub_001E03C0) {
+    if (input::KeyboardActive()) {
+        ctx.esp += 4;  // ret
+        return;
+    }
     if (g_depth > 0) {
         __imp__sub_001E03C0(ctx, base);
         return;
