@@ -23,4 +23,6 @@ const app::GameInfo app::kGame = {
     .ui = app::DrawUi,                    // ImGui drawing each frame
     .pad = nullptr,                       // changes a polled pad
     .rumble = nullptr,                    // changes a rumble before it is set
+    .releases = {{"default.xbe", "6e4f5a20b34afd30eddf34ae258c584f6d49f181"},   // USA, config/game_us.toml
+                 {"default.xbe", "7612b620c2b6bdfcd04c4002b24ce561cba056ce"}},  // Japan, config/game_jp.toml
 };
