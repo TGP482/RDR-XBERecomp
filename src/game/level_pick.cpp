@@ -43,21 +43,19 @@ constexpr hle::Va kSetLevel = SYM(SetLevel);
 constexpr hle::Va kGameMode = SYM(GameMode);
 constexpr hle::Va kStoryStart = SYM(StoryStart);
 
-void SetByte(uint32_t addr, uint8_t value) { *static_cast<uint8_t*>(HostPtr(addr)) = value; }
-
 void StartSession(X86Context& ctx, uint32_t name, uint32_t sublevel) {
     ctx.ecx = kSession;
     CallGuest(ctx, kResetSession, {});
     W32(kSession + kSessionProfile, R32(kCurrentProfile));
     W32(kSession + kSessionPlayers, 1);
     W32(kSession + kSessionMapPlayers, 1);
-    SetByte(kSession + kSessionActive, 1);
+    G<uint8_t>(kSession + kSessionActive) = 1;
     uint32_t character = CallGuest(ctx, kLevelCharacter, {name, sublevel});
     char* slot = static_cast<char*>(HostPtr(kSession + kSessionCharacter));
     std::strcpy(slot, static_cast<const char*>(HostPtr(character)));
-    SetByte(kSession + kSessionHuman, 1);
+    G<uint8_t>(kSession + kSessionHuman) = 1;
     W32(kGameMode, 0);
-    SetByte(kStoryStart, 1);
+    G<uint8_t>(kStoryStart) = 1;
     CallGuest(ctx, kSetLevel, {name, sublevel});
     ctx.ecx = kSession;
     CallGuest(ctx, kCommitSession, {});

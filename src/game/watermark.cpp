@@ -23,7 +23,7 @@ uint32_t g_watermark = 0;  // its element, the main menu's last
 
 void SetRawText(uint32_t element, const char* text) {
     if (!element) return;
-    *static_cast<uint8_t*>(HostPtr(element + kRawText)) = 1;
+    G<uint8_t>(element + kRawText) = 1;
     std::memcpy(HostPtr(element + kText), text, std::strlen(text) + 1);
 }
 

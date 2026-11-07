@@ -38,12 +38,15 @@ struct Element {
 
 int g_depth = 0;
 
-int SideOf(const xdk::ScreenSpan& span) {
-    if (span.x0 <= -kFullWidth && span.x1 >= kFullWidth) return 0;
-    float middle = (span.x0 + span.x1) / 2;
+int SideAt(float middle) {
     if (middle < -kSide) return -1;
     if (middle > kSide) return 1;
     return 0;
+}
+
+int SideOf(const xdk::ScreenSpan& span) {
+    if (span.x0 <= -kFullWidth && span.x1 >= kFullWidth) return 0;
+    return SideAt((span.x0 + span.x1) / 2);
 }
 
 void BeginElement(const Element& e) {
@@ -389,10 +392,7 @@ constexpr uint32_t kPositionBytes = 0xC;
 static int ControllerSide(uint32_t controller) {
     uint32_t place = R32(controller + kControllerPlace);
     float x = std::bit_cast<float>(R32(kControllerPositions + place * kPositionBytes));
-    float middle = x / app::kConsoleAspect;
-    if (middle < -kSide) return -1;
-    if (middle > kSide) return 1;
-    return 0;
+    return SideAt(x / app::kConsoleAspect);
 }
 
 // the tutorial's controller, thiscall(controller), vtable 0x3F5850 slot 6: the game keeps its shape on 16:9 but lays
