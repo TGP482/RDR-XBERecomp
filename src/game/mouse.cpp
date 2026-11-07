@@ -379,6 +379,14 @@ X86_FUNC(sub_0006BAE0) {
 
 bool game::InLoadShow() { return g_load_show; }
 
+// the load thread's run, thiscall(load show): the loading screen or the press start screen while the level loads
+X86_EXTERN_FUNC(__imp__sub_0006B8C0);
+X86_FUNC(sub_0006B8C0) {
+    input::SetLoading(true);
+    __imp__sub_0006B8C0(ctx, base);
+    input::SetLoading(false);
+}
+
 // the player's look, thiscall(player, stick) ret 4, before the camera's input; aiming, the stick turns the camera
 // too, so the turn goes to both
 X86_EXTERN_FUNC(__imp__sub_00143350);
