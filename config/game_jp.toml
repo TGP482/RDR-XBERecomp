@@ -313,6 +313,7 @@ DifficultyVtable            = 0x3D2398
 FirstAlphaBucket            = 0x65EEC8
 FirstVtable                 = 0x3C0000
 FlashTextCopyReturn         = 0x1AEDC8
+FontLineHeight              = 0x28  # Japan's font object is 0x1C0 bytes shorter
 FontName                    = 0x3D0434
 FrameSeconds                = 0x4110EC
 FrontEndState               = 0x666BC8

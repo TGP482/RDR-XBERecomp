@@ -3,7 +3,7 @@
 
 namespace game_font {
 
-constexpr uint32_t kLineHeight = 0x1E8;  // font: its line's height in pixels
+constexpr hle::Va kLineHeight = SYM(FontLineHeight);  // font: its line's height in pixels
 // text layout: its defaults, fastcall(layout); its alignment bits, the right edge right aligned text ends on
 // (relative to x) and its colour
 constexpr hle::Va kInitLayout = SYM(InitLayout);

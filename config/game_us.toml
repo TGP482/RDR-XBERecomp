@@ -313,6 +313,7 @@ DifficultyVtable            = 0x3C79A0
 FirstAlphaBucket            = 0x652B08
 FirstVtable                 = 0x3B6000
 FlashTextCopyReturn         = 0x1AD5D6
+FontLineHeight              = 0x1E8
 FontName                    = 0x3C5804
 FrameSeconds                = 0x40652C
 FrontEndState               = 0x65A810
