@@ -163,13 +163,15 @@ std::vector<std::string> CategoryScript(int page) {
     return lines;
 }
 
-// three prompts, smaller and further apart than two, the keys' names being wider than the console's buttons
-void AddBindPrompts(std::vector<std::string>& lines) {
+// three prompts, smaller and further apart than two, the keys' names being wider than the console's buttons; two for
+// controller buttons, which have no alternate
+void AddBindPrompts(std::vector<std::string>& lines, bool pad) {
     lines.push_back("<FONT:berrylium:SCALE:0.800,0.800>");
-    lines.push_back("<TEXT:115,343,0:BUTTON_CONFIRM><TEXT:300,343,0:BUTTON_ALT2_MISC><TEXT:520,343,0:BUTTON_BACK>");
+    if (pad) lines.push_back("<TEXT:115,343,0:BUTTON_CONFIRM><TEXT:520,343,0:BUTTON_BACK>");
+    else lines.push_back("<TEXT:115,343,0:BUTTON_CONFIRM><TEXT:300,343,0:BUTTON_ALT2_MISC><TEXT:520,343,0:BUTTON_BACK>");
     lines.push_back("<FONT:berrylium:SCALE:0.800,0.800>");
-    lines.push_back("<TEXT:145,343,0:" + InScript(Label("CHANGE KEY")) + ">");
-    lines.push_back("<TEXT:330,343,0:" + InScript(Label("ALTERNATE KEY")) + ">");
+    lines.push_back("<TEXT:145,343,0:" + InScript(Label(pad ? "CHANGE BUTTON" : "CHANGE KEY")) + ">");
+    if (!pad) lines.push_back("<TEXT:330,343,0:" + InScript(Label("ALTERNATE KEY")) + ">");
     lines.push_back("<TEXT:550,343,0:Back>");
 }
 
@@ -195,7 +197,8 @@ std::vector<std::string> SectionScript(int page, size_t section) {
     }
     bool binds = std::any_of(rows.begin(), rows.end(), [](const app::PanelRow& r) { return r.bind; });
     if (binds) {
-        AddBindPrompts(lines);
+        bool pad = std::any_of(rows.begin(), rows.end(), [](const app::PanelRow& r) { return r.pad; });
+        AddBindPrompts(lines, pad);
         return lines;
     }
     lines.push_back("<FONT:berrylium>");
@@ -272,7 +275,7 @@ std::vector<uint32_t> Combos(uint32_t page) {
 
 // keys as the prompts show them, "(Q) (MMB)"; a bare name can be one of the game's strings, "D" shows "Done"
 std::string KeysText(const std::string& keys) {
-    if (keys == "PRESS A KEY") return Label(keys);
+    if (keys == "PRESS A KEY" || keys == "PRESS A BUTTON") return Label(keys);
     std::string out;
     for (size_t start = 0; start <= keys.size();) {
         size_t comma = std::min(keys.find(", ", start), keys.size());

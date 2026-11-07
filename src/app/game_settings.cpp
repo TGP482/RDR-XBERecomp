@@ -129,6 +129,11 @@ void LoadRdr(const void* table) {
             if (auto v = value.value<std::string>()) s.keys[std::string(id.str())] = *v;
         }
     }
+    if (const toml::table* pads = t["controller"].as_table()) {
+        for (auto&& [id, value] : *pads) {
+            if (auto v = value.value<std::string>()) s.pad_buttons[std::string(id.str())] = *v;
+        }
+    }
 }
 
 void SaveRdr(void* table) {
@@ -166,6 +171,9 @@ void SaveRdr(void* table) {
     toml::table keys;
     for (const auto& [id, value] : s.keys) keys.insert(id, value);
     t.insert("keys", keys);
+    toml::table pads;
+    for (const auto& [id, value] : s.pad_buttons) pads.insert(id, value);
+    t.insert("controller", pads);
 }
 
 }  // namespace app

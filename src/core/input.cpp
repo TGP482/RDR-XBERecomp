@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cmath>
 #include <iterator>
+#include <map>
 #include <mutex>
 #include <utility>
 #include <vector>
@@ -215,6 +216,142 @@ bool Pressable(size_t action, bool riding) {
     if (!riding) return true;
     return std::none_of(std::begin(kActions), std::end(kActions),
                         [&](const Target& t) { return t.riding && t.button == kActions[action].button; });
+}
+
+// Controller binds
+
+// Each pad action is one of the console pad's controls, numbered as Target's, which is also its physical button by
+// default; in play the physical button bound to it presses it. A riding action shares its on foot one's button, so
+// they share a row. Toggle HUD has no control and no button by default.
+struct PadAction {
+    const char* id;
+    const char* label;
+    int button;
+    KeyEvent event = KeyEvent::None;
+};
+constexpr PadAction kPadActions[] = {
+    {"jump", "JUMP / DODGE / SPUR", kAnalogA},
+    {"melee", "MELEE", kAnalogB},
+    {"action", "ACTION / SNEAK / DISMOUNT", 2},
+    {"reload", "RELOAD", 3},
+    {"special", "SPECIAL MOVE / ZOOM", 4},
+    {"cycle_weapons", "CYCLE WEAPONS", 5},
+    {"draw", "DRAW / TARGET", kAnalogLeftTrigger},
+    {"fire", "FIRE", 7},
+    {"crouch", "CROUCH", kButtonTarget + 6},
+    {"dead_eye", "DEAD EYE", kButtonTarget + 7},
+    {"next_weapon", "NEXT WEAPON", kButtonTarget + kDpadRight},
+    {"previous_weapon", "PREVIOUS WEAPON", kButtonTarget + kDpadLeft},
+    {"pause", "PAUSE", kButtonTarget + kStart},
+    {"back", "BACK", kButtonTarget + 5},
+    {"toggle_hud", "TOGGLE HUD", -1, KeyEvent::HideHud},
+};
+constexpr size_t kPadCount = std::size(kPadActions);
+// the physical buttons in Pad order: 0-7 analog, 8-15 the buttons bits
+constexpr int kPadButtons = 16;
+const char* const kPadNames[kPadButtons] = {
+    "A",        "B",          "X",          "Y",           "RB",    "LB",   "LT", "RT",
+    "D-PAD UP", "D-PAD DOWN", "D-PAD LEFT", "D-PAD RIGHT", "START", "BACK", "LS", "RS",
+};
+constexpr uint8_t kPadPressed = 30;  // XInput's trigger threshold
+constexpr int kEventTarget = 32;     // an event's control: kEventTarget + the event
+std::array<int, kPadCount> g_pad_binds{};  // each pad action's physical button, -1 none, under g_bind_lock
+// what a physical button presses in play: the control plus one, -1 nothing, 0 its own (a control no action has)
+std::array<std::atomic<int>, kPadButtons> g_pad_map{};
+// per port, what each held physical button went down as: the control plus two, 1 nothing, 0 up
+std::array<std::array<int, kPadButtons>, 4> g_pad_down_as{};
+// per port: buttons held as the input came back (one that answered a bind) wait for release
+std::array<std::atomic<bool>, 4> g_pad_settle{};
+
+std::array<uint8_t, kPadButtons> RawButtons(const Pad& p) {
+    std::array<uint8_t, kPadButtons> raw{};
+    std::copy(std::begin(p.analog), std::end(p.analog), raw.begin());
+    for (int b = kButtonTarget; b < kPadButtons; b++) raw[b] = (p.buttons >> (b - kButtonTarget) & 1) ? 0xFF : 0;
+    return raw;
+}
+
+// what physical button b presses now: the control, -1 nothing; menus keep the stock buttons
+int PadTarget(int b, bool play) {
+    int mapped = g_pad_map[size_t(b)];
+    if (!play || !mapped) return b;
+    return mapped < 0 ? -1 : mapped - 1;
+}
+
+// a button presses what it went down as until it comes up, so one held as the pause menu opens or closes keeps it
+void Rebind(Pad& p, int port) {
+    std::array<uint8_t, kPadButtons> raw = RawButtons(p);
+    p.buttons = 0;
+    std::fill(std::begin(p.analog), std::end(p.analog), uint8_t(0));
+    bool held = std::any_of(raw.begin(), raw.end(), [](uint8_t v) { return v > kPadPressed; });
+    if (g_pad_settle[size_t(port)] && held) return;
+    g_pad_settle[size_t(port)] = false;
+    bool play = InPlay();
+    auto& down_as = g_pad_down_as[size_t(port)];
+    for (int b = 0; b < kPadButtons; b++) {
+        bool down = raw[b] > kPadPressed;
+        bool fresh = down && !down_as[b];
+        if (!down) down_as[b] = 0;
+        else if (fresh) down_as[b] = PadTarget(b, play) + 2;
+        int c = down ? down_as[b] - 2 : PadTarget(b, play);
+        if (c < 0) continue;
+        if (c >= kEventTarget) {
+            if (fresh && KeyEvent(c - kEventTarget) == KeyEvent::HideHud) app::HudHidden() = !app::HudHidden();
+            continue;
+        }
+        if (c < kButtonTarget) p.analog[c] = std::max(p.analog[c], raw[b]);
+        else if (down) p.buttons |= uint16_t(1u << (c - kButtonTarget));
+    }
+}
+
+void ApplyPadBinds() {
+    for (int b = 0; b < kPadButtons; b++) {
+        bool stock = std::any_of(std::begin(kPadActions), std::end(kPadActions),
+                                 [b](const PadAction& a) { return a.button == b; });
+        g_pad_map[size_t(b)] = stock ? -1 : 0;
+    }
+    for (size_t i = 0; i < kPadCount; i++) {
+        const PadAction& a = kPadActions[i];
+        if (g_pad_binds[i] < 0) continue;
+        int target = a.event != KeyEvent::None ? kEventTarget + int(a.event) : a.button;
+        g_pad_map[size_t(g_pad_binds[i])] = target + 1;
+    }
+}
+
+int PadButton(const std::string& name) {
+    for (int b = 0; b < kPadButtons; b++) {
+        if (_stricmp(kPadNames[b], name.c_str()) == 0) return b;
+    }
+    return -1;
+}
+
+// pad action i's button as saved, the stock one when none is
+int SavedPadButton(const std::map<std::string, std::string>& pads, size_t i) {
+    auto it = pads.find(kPadActions[i].id);
+    if (it == pads.end()) return kPadActions[i].button;
+    return it->second.empty() ? -1 : PadButton(it->second);
+}
+
+// An empty name is no button. A hand edited file may give two actions one button: the later one takes its stock
+// button if that is free, else none.
+void LoadPadBinds() {
+    const auto& pads = app::Rdr().pad_buttons;
+    std::array<bool, kPadButtons> taken{};
+    std::vector<size_t> later;
+    for (size_t i = 0; i < kPadCount; i++) {
+        int b = SavedPadButton(pads, i);
+        if (b >= 0 && taken[size_t(b)]) {
+            later.push_back(i);
+            continue;
+        }
+        g_pad_binds[i] = b;
+        if (b >= 0) taken[size_t(b)] = true;
+    }
+    for (size_t i : later) {
+        int b = kPadActions[i].button;
+        g_pad_binds[i] = b >= 0 && !taken[size_t(b)] ? b : -1;
+        if (g_pad_binds[i] >= 0) taken[size_t(b)] = true;
+    }
+    ApplyPadBinds();
 }
 
 // Key names
@@ -567,7 +704,10 @@ Pad Poll(int port) {
     {
         std::lock_guard lock(g_lock);
         UpdatePads();
-        if (SDL_Gamepad* pad = port >= 0 && port < 4 ? g_pads[port] : nullptr) ReadPad(pad, p);
+        if (SDL_Gamepad* pad = port >= 0 && port < 4 ? g_pads[port] : nullptr) {
+            ReadPad(pad, p);
+            Rebind(p, port);
+        }
     }
     if (port == 0) {
         if (p.connected) NotePadHeld(p);
@@ -620,6 +760,7 @@ void SetBlocked(bool blocked) {
     if (g_blocked.exchange(blocked) != blocked) {
         ClipCursor(nullptr);
         g_settle = true;
+        for (auto& settle : g_pad_settle) settle = true;
         RefreshCursor();
     }
 }
@@ -791,6 +932,73 @@ void LoadBindings() {
         auto it = keys.find(kActions[i].action.id);
         g_binds[i] = Parse(it != keys.end() ? it->second : kActions[i].action.defaults);
     }
+    LoadPadBinds();
+}
+
+const Action* PadActions(size_t* count) {
+    static const auto list = [] {
+        std::array<Action, kPadCount> a{};
+        for (size_t i = 0; i < kPadCount; i++) {
+            int b = kPadActions[i].button;
+            a[i] = {kPadActions[i].id, kPadActions[i].label, b >= 0 ? kPadNames[b] : ""};
+        }
+        return a;
+    }();
+    *count = kPadCount;
+    return list.data();
+}
+
+std::string PadBinding(size_t action) {
+    std::lock_guard lock(g_bind_lock);
+    return action < kPadCount && g_pad_binds[action] >= 0 ? kPadNames[g_pad_binds[action]] : "";
+}
+
+void BindPad(size_t action, int button) {
+    bool event = action < kPadCount && kPadActions[action].event != KeyEvent::None;
+    if (action >= kPadCount || button < -1 || button >= kPadButtons || (button < 0 && !event)) return;
+    {
+        std::lock_guard lock(g_bind_lock);
+        // the action that had the button takes this one's old button: buttons only change places. An event, which may
+        // have none, comes off the button it has.
+        int old = g_pad_binds[action];
+        bool off = button < 0 || (old == button && event);
+        for (int& b : g_pad_binds) {
+            if (button >= 0 && b == button) b = old;
+        }
+        g_pad_binds[action] = off ? -1 : button;
+        auto& saved = app::Rdr().pad_buttons;
+        for (size_t i = 0; i < kPadCount; i++) {
+            int b = g_pad_binds[i];
+            if (b == kPadActions[i].button) saved.erase(kPadActions[i].id);
+            else saved[kPadActions[i].id] = b >= 0 ? kPadNames[b] : "";
+        }
+        ApplyPadBinds();
+    }
+    app::Save();
+}
+
+void ResetPadBindings() {
+    {
+        std::lock_guard lock(g_bind_lock);
+        app::Rdr().pad_buttons.clear();
+        LoadPadBinds();
+    }
+    app::Save();
+}
+
+int PressedPadButton() {
+    std::lock_guard lock(g_lock);
+    UpdatePads();
+    for (SDL_Gamepad* pad : g_pads) {
+        if (!pad) continue;
+        Pad p;
+        ReadPad(pad, p);
+        std::array<uint8_t, kPadButtons> raw = RawButtons(p);
+        for (int b = 0; b < kPadButtons; b++) {
+            if (raw[b] > kPadPressed) return b;
+        }
+    }
+    return -1;
 }
 
 int PressedKey() {

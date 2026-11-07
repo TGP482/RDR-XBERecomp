@@ -76,8 +76,17 @@ std::string Binding(size_t action);
 // slot 0 the key, 1 its alternate (the panel's second box); vk 0 clears the slot. A key the other slot has moves.
 void Bind(size_t action, int vk, int slot = 0);
 void ResetBindings();
-void LoadBindings();  // after the settings load
+void LoadBindings();  // after the settings load, the controller's too
 int PressedKey();     // a bindable key or mouse button held now, 0 for none
+// The controller's buttons by action, on every controller: in play each action's console control is pressed by the
+// physical button bound to it, menus keep the stock buttons. A button another action has changes places with the one
+// rebound; toggle HUD bound again to its own button, or given -1, comes off it.
+const Action* PadActions(size_t* count);
+std::string PadBinding(size_t action);
+void BindPad(size_t action, int button);
+void ResetPadBindings();
+// a controller button held now on any controller, -1 for none: 0-7 A B X Y RB LB LT RT, 8-15 the Pad::buttons bits
+int PressedPadButton();
 // the console controls the game's prompts show, numbered as the actions press them
 enum PromptButton {
     kPromptWalk = -1,

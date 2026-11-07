@@ -142,12 +142,17 @@ constexpr Entry kEntries[] = {
     {"SETTINGS PANEL", {u"Panneau des paramètres", u"Einstellungsmenü", u"Pannello impostazioni", u"Panel de configuración"}},
     {"UNBOUND", {u"Non assigné", u"Nicht belegt", u"Non assegnato", u"Sin asignar"}},
     {"PRESS A KEY", {u"Appuyez sur une touche", u"Taste drücken", u"Premi un tasto", u"Pulsa una tecla"}},
+    {"JUMP / DODGE / SPUR", {u"Sauter / esquiver / éperonner", u"Springen / Ausweichen / Sporen geben", u"Salta / Schiva / Spronare", u"Saltar / Esquivar / Espolear"}},
+    {"ACTION / SNEAK / DISMOUNT", {u"Action / se faufiler / descendre", u"Aktion / Schleichen / Absteigen", u"Azione / Furtività / Smontare", u"Acción / Sigilo / Desmontar"}},
+    {"BUTTONS", {u"Boutons", u"Tasten", u"Pulsanti", u"Botones"}},
+    {"PRESS A BUTTON", {u"Appuyez sur un bouton", u"Taste drücken", u"Premi un pulsante", u"Pulsa un botón"}},
 
     // the panel's own
     {"SETTINGS", {u"Paramètres", u"Einstellungen", u"Impostazioni", u"Configuración"}},
     {"DEFAULTS", {u"Par défaut", u"Standard", u"Predefiniti", u"Por defecto"}},
     {"APPLY", {u"Appliquer", u"Übernehmen", u"Applica", u"Aplicar"}},
     {"Press a key or mouse button to bind, Escape cancels", {u"Appuyez sur une touche ou un bouton de souris, Échap pour annuler", u"Taste oder Maustaste drücken, Escape bricht ab", u"Premi un tasto o un pulsante del mouse, Esc per annullare", u"Pulsa una tecla o un botón del ratón, Escape para cancelar"}},
+    {"Press a controller button to bind, Escape cancels", {u"Appuyez sur un bouton de la manette, Échap pour annuler", u"Controller-Taste drücken, Escape bricht ab", u"Premi un pulsante del controller, Esc per annullare", u"Pulsa un botón del controlador, Escape para cancelar"}},
     {"Right click or Delete clears the key", {u"Clic droit ou Suppr pour effacer la touche", u"Rechtsklick oder Entf löscht die Taste", u"Clic destro o Canc per cancellare il tasto", u"Clic derecho o Supr para borrar la tecla"}},
 };
 

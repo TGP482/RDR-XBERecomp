@@ -44,6 +44,7 @@ struct RdrSettings {
     uint32_t vibration_strength = 100;  // percent of the game's rumble, 10 to 200
     gyro::Settings gyro;
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default
+    std::map<std::string, std::string> pad_buttons;  // controller action id to button name, absent is the stock one
 };
 
 RdrSettings& Rdr();
