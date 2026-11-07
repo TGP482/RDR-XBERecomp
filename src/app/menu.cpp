@@ -190,7 +190,11 @@ constexpr int kSettingsPage = 0;
 constexpr int kKeyboardPage = 1;
 constexpr int kControllerPage = 2;
 constexpr int kDebugPage = 3;  // a tab of the panel alone, not in the game's options
+#ifdef NDEBUG
+constexpr int kTabs = kPanelPages;  // the DEBUG tab is left out of release builds
+#else
 constexpr int kTabs = kPanelPages + 1;
+#endif
 
 // the mouse rows, then each section of the key binds under its title
 const std::vector<Row>& KeyboardRows() {

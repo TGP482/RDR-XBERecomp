@@ -71,5 +71,6 @@ std::atomic<bool>& HdrDisplay();
 // GameInfo hooks: the settings file's toml::table
 void LoadRdr(const void* table);
 void SaveRdr(void* table);
+void InitRdr();
 
 }  // namespace app

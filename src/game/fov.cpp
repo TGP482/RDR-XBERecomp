@@ -1,6 +1,6 @@
 // Field of view in play: the player cameras' angle widens by the setting's tangent over the game's. Cutscenes (the
 // cinema shutters, level intros and outros), the attract loop and the theater keep the game's angle. Every view takes
-// the output's shape, where the game knows only 4:3 and 16:9. Grass culls by the same widened angle.
+// the output's shape, where the game knows only 4:3 and 16:9. Grass culls by the drawn view's width.
 #include <cmath>
 
 #include "app/display.h"
@@ -24,6 +24,10 @@ constexpr uint32_t kCameraFovSource = 0x68;
 constexpr hle::Va kCinema = SYM(Cinema);
 
 constexpr float kHalfDegree = 3.14159265f / 360.0f;
+
+// out of cutscenes the view's height stretches over the 400 lines between 40 line borders (sub_000529C0)
+constexpr float kBorderStretch = 480.0f / 400.0f;
+constexpr float kBorderShape = 1.0f + (kBorderStretch - 1.0f) / 480.0f;
 
 // set from the console's video flags (sub_0017E370): widescreen, the 16:9 shape it gives the views, and the
 // viewports' shape over the screen's pixels
@@ -51,6 +55,17 @@ float FovScale() {
     return std::tan(float(app::Rdr().fov) * kHalfDegree) / std::tan(float(app::kGameFov) * kHalfDegree);
 }
 
+float Widened(float fov) {
+    return 2.0f * std::atan(std::tan(fov * 0.5f) * FovScale());
+}
+
+// the view's half width at unit depth as the projection builds it out of cutscenes: the camera's angle sets the
+// height across a 4:3 frame, stretched by the borders, then the shape sets the width
+float DrawnHalfWidth(float fov, float shape) {
+    float halfHeight = std::atan(std::tan(fov * 0.5f) / (kBorderShape * app::kConsoleAspect)) * kBorderStretch;
+    return std::tan(halfHeight) * shape;
+}
+
 bool InPlay() {
     input::Screen screen = input::GetScreen();
     bool playing = screen == input::Screen::Play || screen == input::Screen::Pause;
@@ -71,24 +86,25 @@ X86_FUNC(sub_ViewportProjection) {
     }
     float& fov = G<float>(camera + kCameraFov);
     float game = fov;
-    fov = 2.0f * std::atan(std::tan(game * 0.5f) * scale);
+    fov = Widened(game);
     __imp__sub_ViewportProjection(ctx, base);
     fov = game;
 }
 
 // a grass field's footprint in the drawn view, thiscall(field, footprint, view) ret 8: its half width is
-// tan(angle) / 2, so the angle is set for that to widen by the same scale
+// tan(angle) / 2, so the angle is set for that to widen as the drawn view does over the console's 4:3 one
 X86_EXTERN_FUNC(__imp__sub_GrassFootprint);
 X86_FUNC(sub_GrassFootprint) {
     uint32_t view = R32(kViews + R32(kView) * 4);
     uint32_t camera = view ? R32(view) : 0;
-    float scale = FovScale();
-    if (!camera || scale == 1.0f || !InPlay()) {
+    if (!camera || G<uint8_t>(kCinema)) {
         __imp__sub_GrassFootprint(ctx, base);
         return;
     }
     float& fov = G<float>(R32(camera + kCameraFovSource));
     float game = fov;
+    float drawn = InPlay() ? Widened(game) : game;
+    float scale = DrawnHalfWidth(drawn, app::OutputAspect()) / DrawnHalfWidth(game, app::kConsoleAspect);
     fov = std::atan(std::tan(game) * scale);
     __imp__sub_GrassFootprint(ctx, base);
     fov = game;

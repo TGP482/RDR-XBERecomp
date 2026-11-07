@@ -15,12 +15,15 @@
 #include <toml++/toml.hpp>
 
 #include "app/app.h"
+#include "app/window.h"
 #include "audio/audio.h"
 #include "xdk/hle.h"
 
 namespace app {
 
 namespace {
+
+bool g_fps_cap_saved = false;  // the settings file holds MAX FRAME RATE
 
 // the Windows display language when the game has it, else English
 uint32_t SystemLanguage() {
@@ -133,7 +136,7 @@ std::atomic<bool>& HudHidden() {
 void LoadRdr(const void* table) {
     const toml::table& t = *static_cast<const toml::table*>(table);
     RdrSettings& s = Rdr();
-    if (!t.contains("fps_cap")) Get().fps_cap = kFpsCapRefresh;  // MAX FRAME RATE starts at the refresh rate
+    g_fps_cap_saved = t.contains("fps_cap");
     s.monitor = t["monitor"].value_or(s.monitor);
     s.fps_counter = t["fps_counter"].value_or(s.fps_counter);
     s.fmv_scale = std::min(t["fmv_scale"].value_or(s.fmv_scale), 1u);
@@ -218,6 +221,12 @@ void SaveRdr(void* table) {
     toml::table pads;
     for (const auto& [id, value] : s.pad_buttons) pads.insert(id, value);
     t.insert("controller", pads);
+}
+
+// after the settings load, with or without a file: MAX FRAME RATE starts at the refresh rate
+void InitRdr() {
+    if (!g_fps_cap_saved) Get().fps_cap = kFpsCapRefresh;
+    InitInput();
 }
 
 }  // namespace app
