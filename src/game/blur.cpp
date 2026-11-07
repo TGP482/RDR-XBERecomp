@@ -5,13 +5,13 @@
 #include "xdk/hle.h"
 
 // the blur pass, a vtable slot (0x3D61CC) jumping to 0x1156D0, thiscall with nothing to return
-X86_EXTERN_FUNC(__imp__sub_0005F0B0);
-X86_FUNC(sub_0005F0B0) {
+X86_EXTERN_FUNC(__imp__sub_BlurPass);
+X86_FUNC(sub_BlurPass) {
     if (!app::Rdr().screen_blur) {
         ctx.esp += 4;  // ret
         return;
     }
     xdk::BeginInlineKeep();
-    __imp__sub_0005F0B0(ctx, base);
+    __imp__sub_BlurPass(ctx, base);
     xdk::EndInlineKeep();
 }

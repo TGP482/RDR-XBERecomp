@@ -380,12 +380,12 @@ std::string WithRow(const std::string& line, int y) {
 
 // a line of a page's script, thiscall(page, line, length) ret 8: an Options page's own buttons move up for ours, which
 // follow its last; a page's Back prompt moves right of its confirm's, which the PC keys widen
-X86_EXTERN_FUNC(__imp__sub_0001E990);
-X86_FUNC(sub_0001E990) {
+X86_EXTERN_FUNC(__imp__sub_PageScriptLine);
+X86_FUNC(sub_PageScriptLine) {
     uint32_t page = ctx.ecx;
     std::string line = static_cast<const char*>(HostPtr(R32(ctx.esp + 4)));
     if (g_adding) {
-        __imp__sub_0001E990(ctx, base);
+        __imp__sub_PageScriptLine(ctx, base);
         return;
     }
     if (R32(page + kPageLines) == 1) {
@@ -399,7 +399,7 @@ X86_FUNC(sub_0001E990) {
         W32(ctx.esp + 4, WriteLine(moved));
         W32(ctx.esp + 8, uint32_t(std::min(moved.size(), kMaxLine)));
     }
-    __imp__sub_0001E990(ctx, base);
+    __imp__sub_PageScriptLine(ctx, base);
     if (!button || g_buttons != own) return;
     uint32_t result = ctx.eax;
     g_adding = true;
@@ -412,27 +412,27 @@ X86_FUNC(sub_0001E990) {
 
 // the page manager's page by name, thiscall(manager, name, x, y, width, height, ?, keep) ret 0x1C: ours are made as
 // a menu page, never kept, so a visit reads them anew
-X86_EXTERN_FUNC(__imp__sub_000291E0);
-X86_FUNC(sub_000291E0) {
+X86_EXTERN_FUNC(__imp__sub_PageByName);
+X86_FUNC(sub_PageByName) {
     std::string name = ReadName(R32(ctx.esp + 4));
     std::vector<std::string> lines;
     if (!Script(name, lines)) {
-        __imp__sub_000291E0(ctx, base);
+        __imp__sub_PageByName(ctx, base);
         return;
     }
     g_loading = name;
     W32(ctx.esp + 4, kMenuKindName);
     W32(ctx.esp + 0x1C, 0);
-    __imp__sub_000291E0(ctx, base);
+    __imp__sub_PageByName(ctx, base);
     g_loading.clear();
 }
 
 // a page reads its .swui script, thiscall(page, name) ret 4: the page being made as ours reads ours
-X86_EXTERN_FUNC(__imp__sub_0001F140);
-X86_FUNC(sub_0001F140) {
+X86_EXTERN_FUNC(__imp__sub_PageReadScript);
+X86_FUNC(sub_PageReadScript) {
     g_arrowless.clear();
     if (g_loading.empty()) {
-        __imp__sub_0001F140(ctx, base);
+        __imp__sub_PageReadScript(ctx, base);
         return;
     }
     uint32_t page = ctx.ecx;
@@ -455,19 +455,19 @@ X86_FUNC(sub_0001F140) {
 }
 
 // a menu page's input, thiscall(page): on a section page Left and Right step the focused row, A rebinds a key
-X86_EXTERN_FUNC(__imp__sub_00030AF0);
-X86_FUNC(sub_00030AF0) {
+X86_EXTERN_FUNC(__imp__sub_MenuPageInput);
+X86_FUNC(sub_MenuPageInput) {
     uint32_t page = ctx.ecx;
     int panel_page = 0;
     size_t section = 0;
     if (!SectionPage(ReadName(page + kPageName), panel_page, section)) {
         g_arrowless.clear();
-        __imp__sub_00030AF0(ctx, base);
+        __imp__sub_MenuPageInput(ctx, base);
         return;
     }
     std::vector<uint32_t> combos = Combos(page);
     int before = FocusedCombo(page, combos);
-    __imp__sub_00030AF0(ctx, base);
+    __imp__sub_MenuPageInput(ctx, base);
     UpdateScroll(ctx, page, combos, before, app::PanelRows(panel_page, section).size());
     int focused = FocusedCombo(page, combos);
     if (focused >= 0) {
@@ -482,11 +482,11 @@ X86_FUNC(sub_00030AF0) {
 }
 
 // a combo's draw, thiscall(combo): the key bind rows' arrows unseen, from the page's first frame
-X86_EXTERN_FUNC(__imp__sub_000237A0);
-X86_FUNC(sub_000237A0) {
+X86_EXTERN_FUNC(__imp__sub_ComboDraw);
+X86_FUNC(sub_ComboDraw) {
     if (std::find(g_arrowless.begin(), g_arrowless.end(), ctx.ecx) != g_arrowless.end()) {
         G<float>(ctx.ecx + kLeftArrowAlpha) = 0.0f;
         G<float>(ctx.ecx + kRightArrowAlpha) = 0.0f;
     }
-    __imp__sub_000237A0(ctx, base);
+    __imp__sub_ComboDraw(ctx, base);
 }

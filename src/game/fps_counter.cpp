@@ -71,12 +71,12 @@ void DrawFpsCounter(X86Context& ctx) {
 }  // namespace
 
 // the frame's end: resets the stages, streams and shaders, then swaps unless an offscreen target is drawn
-X86_EXTERN_FUNC(__imp__sub_0017D3A0);
-X86_FUNC(sub_0017D3A0) {
+X86_EXTERN_FUNC(__imp__sub_FrameEnd);
+X86_FUNC(sub_FrameEnd) {
     if (app::Rdr().fps_counter && !R32(kOffscreenTarget)) {
         uint32_t ecx = ctx.ecx;
         DrawFpsCounter(ctx);
         ctx.ecx = ecx;
     }
-    __imp__sub_0017D3A0(ctx, base);
+    __imp__sub_FrameEnd(ctx, base);
 }

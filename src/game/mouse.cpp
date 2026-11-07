@@ -359,8 +359,8 @@ float TakeCameraYaw() {
 }  // namespace
 
 // ioInput update: the pads, then their listeners
-X86_EXTERN_FUNC(__imp__sub_00048390);
-X86_FUNC(sub_00048390) {
+X86_EXTERN_FUNC(__imp__sub_InputUpdate);
+X86_FUNC(sub_InputUpdate) {
     input::Screen screen = CurrentScreen();
     input::SetScreen(screen);
     uint32_t player = R32(kPlayer);
@@ -369,31 +369,31 @@ X86_FUNC(sub_00048390) {
     if (!g_camera.ticked) g_camera.turn = {};
     g_camera.ticked = false;
     UpdateDeadZones();
-    __imp__sub_00048390(ctx, base);
+    __imp__sub_InputUpdate(ctx, base);
 }
 
 // NewLoadShow's enter, thiscall(state)
-X86_EXTERN_FUNC(__imp__sub_0006BAE0);
-X86_FUNC(sub_0006BAE0) {
+X86_EXTERN_FUNC(__imp__sub_LoadShowEnter);
+X86_FUNC(sub_LoadShowEnter) {
     g_load_show = true;
-    __imp__sub_0006BAE0(ctx, base);
+    __imp__sub_LoadShowEnter(ctx, base);
     g_load_show = false;
 }
 
 bool game::InLoadShow() { return g_load_show; }
 
 // the load thread's run, thiscall(load show): the loading screen or the press start screen while the level loads
-X86_EXTERN_FUNC(__imp__sub_0006B8C0);
-X86_FUNC(sub_0006B8C0) {
+X86_EXTERN_FUNC(__imp__sub_LoadThreadRun);
+X86_FUNC(sub_LoadThreadRun) {
     input::SetLoading(true);
-    __imp__sub_0006B8C0(ctx, base);
+    __imp__sub_LoadThreadRun(ctx, base);
     input::SetLoading(false);
 }
 
 // the player's look, thiscall(player, stick) ret 4, before the camera's input; aiming, the stick turns the camera
 // too, so the turn goes to both
-X86_EXTERN_FUNC(__imp__sub_00143350);
-X86_FUNC(sub_00143350) {
+X86_EXTERN_FUNC(__imp__sub_PlayerLook);
+X86_FUNC(sub_PlayerLook) {
     uint32_t player = ctx.ecx;
     uint32_t stick = R32(ctx.esp + 4);
     bool aiming = Aiming(player);
@@ -406,13 +406,13 @@ X86_FUNC(sub_00143350) {
             AddCameraTurn(t);
         }
     }
-    __imp__sub_00143350(ctx, base);
+    __imp__sub_PlayerLook(ctx, base);
 }
 
 // the duel's aim, thiscall(player): the stick turns the reticle's yaw right and its pitch up, the aim sensitivities
 // apply; it runs before the camera's input
-X86_EXTERN_FUNC(__imp__sub_00147630);
-X86_FUNC(sub_00147630) {
+X86_EXTERN_FUNC(__imp__sub_DuelAim);
+X86_FUNC(sub_DuelAim) {
     uint32_t player = ctx.ecx;
     if (MouseTurns(player)) {
         input::SetAiming(true);
@@ -420,13 +420,13 @@ X86_FUNC(sub_00147630) {
         AddFloat(player + kLookYaw, t.x);
         AddFloat(player + kLookPitch, -t.y);
     }
-    __imp__sub_00147630(ctx, base);
+    __imp__sub_DuelAim(ctx, base);
 }
 
 // the duel's stick, thiscall(duel, stick) ret 4: before the reticle the mouse's vertical turn moves the right stick,
 // down grabs the gun (back) and up draws it (forward)
-X86_EXTERN_FUNC(__imp__sub_00096750);
-X86_FUNC(sub_00096750) {
+X86_EXTERN_FUNC(__imp__sub_DuelStick);
+X86_FUNC(sub_DuelStick) {
     uint32_t stick = R32(ctx.esp + 4);
     uint32_t player = R32(kPlayer);
     bool drawing = R32(ctx.ecx + kDuelState) < kDuelAiming;
@@ -435,26 +435,26 @@ X86_FUNC(sub_00096750) {
         if (std::abs(flick) > std::abs(ReadFloat(stick + kStickY))) WriteFloat(stick + kStickY, flick);
         g_turn.y = 0.0f;
     }
-    __imp__sub_00096750(ctx, base);
+    __imp__sub_DuelStick(ctx, base);
 }
 
 // the camera machine's inputs from the player, thiscall(player, sticks) ret 4
-X86_EXTERN_FUNC(__imp__sub_0013FCF0);
-X86_FUNC(sub_0013FCF0) {
+X86_EXTERN_FUNC(__imp__sub_CameraInputs);
+X86_FUNC(sub_CameraInputs) {
     uint32_t player = ctx.ecx;
-    __imp__sub_0013FCF0(ctx, base);
+    __imp__sub_CameraInputs(ctx, base);
     if (MouseTurns(player)) LatchCameraTurn(player);
 }
 
 // the camera machine's tick, thiscall(machine, tunables) ret 4, from the rig's update; a turn its cameras leave is
 // dropped, as is one no tick came for since the last pad update
-X86_EXTERN_FUNC(__imp__sub_0029C670);
-X86_FUNC(sub_0029C670) {
+X86_EXTERN_FUNC(__imp__sub_CameraMachineTick);
+X86_FUNC(sub_CameraMachineTick) {
     bool mouse_camera = ctx.ecx && ctx.ecx == g_camera.machine;
     g_camera.ticking = mouse_camera;
     g_camera.followed = false;
     if (mouse_camera) ApplyCameraTilt();
-    __imp__sub_0029C670(ctx, base);
+    __imp__sub_CameraMachineTick(ctx, base);
     g_camera.ticking = false;
     if (!mouse_camera) return;
     g_camera.ticked = true;
@@ -465,8 +465,8 @@ X86_FUNC(sub_0029C670) {
 }
 
 // SetTilt's update, cdecl(dofs, action): its param 0, the tilt the camera holds, clamps the tilt it reads back
-X86_EXTERN_FUNC(__imp__sub_002A6E40);
-X86_FUNC(sub_002A6E40) {
+X86_EXTERN_FUNC(__imp__sub_SetTiltUpdate);
+X86_FUNC(sub_SetTiltUpdate) {
     if (g_camera.ticking) {
         uint32_t action = R32(ctx.esp + 8);
         uint32_t tilt = R32(R32(R32(action + kActionParams)));
@@ -474,7 +474,7 @@ X86_FUNC(sub_002A6E40) {
         std::vector<uint32_t> seen;
         g_camera.ticked_clamp = FindClamp(tilt, input, seen);
     }
-    __imp__sub_002A6E40(ctx, base);
+    __imp__sub_SetTiltUpdate(ctx, base);
 }
 
 // the follow camera's pivot (P_StrafePivot_SetRadius_AngleLimit 0x2A82D0) has just read its bearing, the
@@ -484,22 +484,22 @@ void FollowCameraBearing(X86Context& ctx, uint8_t*) {
 }
 
 // the wagon camera's pivot (P_WagonStrafePivot_SetRadius), thiscall(action, context) ret 4
-X86_EXTERN_FUNC(__imp__sub_002ACD30);
-X86_FUNC(sub_002ACD30) {
+X86_EXTERN_FUNC(__imp__sub_WagonCameraPivot);
+X86_FUNC(sub_WagonCameraPivot) {
     if (g_camera.ticking) AddFloat(ctx.ecx + kWagonSwing, -TakeCameraYaw());
-    __imp__sub_002ACD30(ctx, base);
+    __imp__sub_WagonCameraPivot(ctx, base);
 }
 
 // the mounted gun camera (c_gatling), thiscall(action, context) ret 4: it subtracts the stick's turn, then clamps
-X86_EXTERN_FUNC(__imp__sub_0029FDA0);
-X86_FUNC(sub_0029FDA0) {
+X86_EXTERN_FUNC(__imp__sub_GatlingCamera);
+X86_FUNC(sub_GatlingCamera) {
     if (g_camera.ticking) {
         Turn t = g_camera.turn;
         g_camera.turn = {};
         AddFloat(ctx.ecx + kGatlingYaw, -t.x);
         AddFloat(ctx.ecx + kGatlingPitch, -t.y);
     }
-    __imp__sub_0029FDA0(ctx, base);
+    __imp__sub_GatlingCamera(ctx, base);
 }
 
 // the aim's soft lock searches, thiscall(player, ...), from the targeting update (sub_00148D10), a target or 0
@@ -511,5 +511,5 @@ X86_FUNC(sub_0029FDA0) {
         if (NoAimAssist(player)) ctx.eax = 0;                                \
     }
 
-SOFT_LOCK_SEARCH(sub_00141D50)
-SOFT_LOCK_SEARCH(sub_00142850)
+SOFT_LOCK_SEARCH(sub_SoftLockSearchFirstPass)
+SOFT_LOCK_SEARCH(sub_SoftLockSearchSecondPass)

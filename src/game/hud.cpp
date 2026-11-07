@@ -19,11 +19,11 @@ bool Forced(uint32_t bit) {
 }  // namespace
 
 // a cheat's bit in the profile, cdecl(player, bit)
-X86_EXTERN_FUNC(__imp__sub_00057070);
-X86_FUNC(sub_00057070) {
+X86_EXTERN_FUNC(__imp__sub_CheatBit);
+X86_FUNC(sub_CheatBit) {
     uint32_t bit = R32(ctx.esp + 8);
     if (!Forced(bit)) {
-        __imp__sub_00057070(ctx, base);
+        __imp__sub_CheatBit(ctx, base);
         return;
     }
     ctx.eax = 1;

@@ -73,8 +73,8 @@ void FrameStepEax(X86Context& ctx, uint8_t*) {
 
 // the scene's random light flicker, thiscall(scene): it fires on frame counts, so it runs once a console frame, with
 // the console frame's length
-X86_EXTERN_FUNC(__imp__sub_00107A30);
-X86_FUNC(sub_00107A30) {
+X86_EXTERN_FUNC(__imp__sub_LightFlicker);
+X86_FUNC(sub_LightFlicker) {
     uint32_t scene = ctx.ecx;
     uint32_t ret = R32(ctx.esp);
     uint32_t frames = R32(kFrameCount);
@@ -90,18 +90,18 @@ X86_FUNC(sub_00107A30) {
         ctx.ecx = scene;
         W32(kFrameCount, first + i);
         W32(kFrameSeconds, console);
-        __imp__sub_00107A30(ctx, base);
+        __imp__sub_LightFlicker(ctx, base);
     }
     W32(kFrameCount, frames);
     W32(kFrameSeconds, seconds);
 }
 
 // the game's timer, once a frame: the step it adds to the clock goes into a double, which the float clock follows
-X86_EXTERN_FUNC(__imp__sub_00084100);
-X86_FUNC(sub_00084100) {
+X86_EXTERN_FUNC(__imp__sub_GameTimer);
+X86_FUNC(sub_GameTimer) {
     static double clock = 0;
     if (float(clock) != GF(kGameClock)) clock = GF(kGameClock);
-    __imp__sub_00084100(ctx, base);
+    __imp__sub_GameTimer(ctx, base);
     clock += GF(kClockStep);
     W32(kGameClock, std::bit_cast<uint32_t>(float(clock)));
 }

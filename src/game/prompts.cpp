@@ -151,13 +151,13 @@ float LeftShift(X86Context& ctx, const DrawArgs& d, uint32_t keys) {
 }  // namespace
 
 // a font's draw or measure, thiscall(font, x, y, text, scale x, scale y, layout, measure only, batch) ret 0x20
-X86_EXTERN_FUNC(__imp__sub_00054A30);
-X86_FUNC(sub_00054A30) {
+X86_EXTERN_FUNC(__imp__sub_FontDraw);
+X86_FUNC(sub_FontDraw) {
     DrawArgs d{ctx.ecx, R32(ctx.esp + 0xC), R32(ctx.esp + 0x10), R32(ctx.esp + 0x14), R32(ctx.esp + 0x18)};
     std::u16string text = d.text && !g_measuring && input::KeyboardActive() ? ReadText(d.text) : std::u16string();
     std::u16string keys;
     if (!WithKeys(text, keys)) {
-        __imp__sub_00054A30(ctx, base);
+        __imp__sub_FontDraw(ctx, base);
         return;
     }
     uint32_t replaced = WriteText(keys);
@@ -168,16 +168,16 @@ X86_FUNC(sub_00054A30) {
         ctx.ecx = d.font;
     }
     W32(ctx.esp + 0xC, replaced);
-    __imp__sub_00054A30(ctx, base);
+    __imp__sub_FontDraw(ctx, base);
 }
 
 // a Flash text field's copy of its ActionScript text; in a text field's draw it hands over the text shown, as keys
-X86_EXTERN_FUNC(__imp__sub_001AC360);
-X86_FUNC(sub_001AC360) {
+X86_EXTERN_FUNC(__imp__sub_FlashTextCopy);
+X86_FUNC(sub_FlashTextCopy) {
     bool draw = R32(ctx.esp) == kFlashTextCopyReturn;
     uint32_t buffer = R32(ctx.esp + 4);
     uint32_t own = ctx.ebp;
-    __imp__sub_001AC360(ctx, base);
+    __imp__sub_FlashTextCopy(ctx, base);
     if (!draw || !input::KeyboardActive()) return;
     uint32_t text = ctx.eax ? buffer : own;
     std::u16string keys;

@@ -27,10 +27,10 @@ void SetRawText(uint32_t element, const char* text) {
 }  // namespace
 
 // main menu instructions update, thiscall(seconds) ret 4
-X86_EXTERN_FUNC(__imp__sub_00039E00);
-X86_FUNC(sub_00039E00) {
+X86_EXTERN_FUNC(__imp__sub_MainMenuInstructionsUpdate);
+X86_FUNC(sub_MainMenuInstructionsUpdate) {
     uint32_t menu = ctx.ecx;
-    __imp__sub_00039E00(ctx, base);
+    __imp__sub_MainMenuInstructionsUpdate(ctx, base);
     char watermark[16];
     std::snprintf(watermark, sizeof(watermark), "XBE Recomp V%d", RDR_VERSION);
     SetRawText(R32(menu + kLiveTitle), watermark);

@@ -328,14 +328,14 @@ void DrawKeysAfter(X86Context& ctx, uint32_t text, uint32_t colour) {
 
 }  // namespace
 
-X86_EXTERN_FUNC(__imp__sub_001AC840);
+X86_EXTERN_FUNC(__imp__sub_FlashObjectDraw);
 
 namespace {
 
 // the object's place and colour without drawing it, and its character's box
 Box Place(X86Context& ctx, uint8_t* base, uint32_t object) {
     W32(object + kFirstChild, EmptyChild());
-    __imp__sub_001AC840(ctx, base);
+    __imp__sub_FlashObjectDraw(ctx, base);
     W32(object + kFirstChild, 0);
     Box box;
     AddCharacter(R32(object + kCharacter), ReadMatrix(object + kWorld), box);
@@ -346,14 +346,14 @@ Box Place(X86Context& ctx, uint8_t* base, uint32_t object) {
 
 // a display object's draw, thiscall(object, parent's transform) ret 4: its world matrix and colour, then its children
 // or its character
-X86_FUNC(sub_001AC840) {
+X86_FUNC(sub_FlashObjectDraw) {
     uint32_t object = ctx.ecx;
     uint32_t esp = ctx.esp;
     bool visible = G<uint8_t>(object + kFlags) & kVisible;
     bool boxable = visible && !R32(object + kFirstChild) && Boxable(object);
     bool keys = input::KeyboardActive();
     if (g_picture) {
-        if (!boxable) __imp__sub_001AC840(ctx, base);
+        if (!boxable) __imp__sub_FlashObjectDraw(ctx, base);
         else g_picture->Add(Place(ctx, base, object));
         return;
     }
@@ -362,7 +362,7 @@ X86_FUNC(sub_001AC840) {
     if (!key.empty()) {
         Box box;
         g_picture = &box;
-        if (!boxable) __imp__sub_001AC840(ctx, base);
+        if (!boxable) __imp__sub_FlashObjectDraw(ctx, base);
         else box.Add(Place(ctx, base, object));
         g_picture = nullptr;
         uint32_t alpha = Alpha(object);
@@ -374,12 +374,12 @@ X86_FUNC(sub_001AC840) {
         ctx.esp = esp;
         ctx.ecx = object;
     }
-    __imp__sub_001AC840(ctx, base);
+    __imp__sub_FlashObjectDraw(ctx, base);
 }
 
 // a Flash movie's player draw, thiscall(player), inside the movie's draw states: the keys go over the movie
-X86_EXTERN_FUNC(__imp__sub_001ABEC0);
-X86_FUNC(sub_001ABEC0) {
+X86_EXTERN_FUNC(__imp__sub_FlashPlayerDraw);
+X86_FUNC(sub_FlashPlayerDraw) {
     std::vector<Box>& pictures = g_pictures[ctx.ecx];
     std::vector<Spread>& spreads = g_spreads[ctx.ecx];
     std::vector<FlashKey>& after = g_after_text[ctx.ecx];
@@ -389,7 +389,7 @@ X86_FUNC(sub_001ABEC0) {
     g_drawn_after.clear();
     g_texts.clear();
     g_glyph_points.clear();
-    __imp__sub_001ABEC0(ctx, base);
+    __imp__sub_FlashPlayerDraw(ctx, base);
     g_covered = nullptr;
     g_spread = nullptr;
     g_after = nullptr;
@@ -436,31 +436,31 @@ static void EndText(X86Context& ctx, uint32_t text) {
 }
 
 // a static text's draw, thiscall(text, place, state) ret 8
-X86_EXTERN_FUNC(__imp__sub_001AE2C0);
-X86_FUNC(sub_001AE2C0) {
+X86_EXTERN_FUNC(__imp__sub_FlashStaticTextDraw);
+X86_FUNC(sub_FlashStaticTextDraw) {
     uint32_t text = ctx.ecx;
     uint32_t commands = R32(text + kTextCommands);
     if (commands) W32(text + kTextCommands, PcWordingCommands(commands));
     BeginText();
-    __imp__sub_001AE2C0(ctx, base);
+    __imp__sub_FlashStaticTextDraw(ctx, base);
     W32(text + kTextCommands, commands);
     EndText(ctx, text);
 }
 
 // an edit text's draw, thiscall(text, place, state) ret 8
-X86_EXTERN_FUNC(__imp__sub_001AE680);
-X86_FUNC(sub_001AE680) {
+X86_EXTERN_FUNC(__imp__sub_FlashEditTextDraw);
+X86_FUNC(sub_FlashEditTextDraw) {
     uint32_t text = ctx.ecx;
     BeginText();
-    __imp__sub_001AE680(ctx, base);
+    __imp__sub_FlashEditTextDraw(ctx, base);
     EndText(ctx, text);
 }
 
 // a glyph vertex, cdecl(x, y, scale), written where the vertex pointer was
-X86_EXTERN_FUNC(__imp__sub_001ADFA0);
-X86_FUNC(sub_001ADFA0) {
+X86_EXTERN_FUNC(__imp__sub_FlashGlyphVertex);
+X86_FUNC(sub_FlashGlyphVertex) {
     uint32_t vertex = R32(kTextVertex);
-    __imp__sub_001ADFA0(ctx, base);
+    __imp__sub_FlashGlyphVertex(ctx, base);
     if (!g_glyphs) return;
     float& x = G<float>(vertex);
     float y = G<float>(vertex + 4);

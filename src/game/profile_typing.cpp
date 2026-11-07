@@ -49,10 +49,10 @@ void TypeName(X86Context& ctx, uint32_t page) {
 }  // namespace
 
 // the profile page's input, thiscall(page), its pressed buttons read
-X86_EXTERN_FUNC(__imp__sub_00034500);
-X86_FUNC(sub_00034500) {
+X86_EXTERN_FUNC(__imp__sub_ProfilePageInput);
+X86_FUNC(sub_ProfilePageInput) {
     uint32_t page = ctx.ecx;
     if (G<uint8_t>(page + kNaming)) TypeName(ctx, page);
     ctx.ecx = page;
-    __imp__sub_00034500(ctx, base);
+    __imp__sub_ProfilePageInput(ctx, base);
 }

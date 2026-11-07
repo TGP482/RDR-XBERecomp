@@ -30,19 +30,19 @@ HLE_STDCALL(XOnlineGetUsers, 2) {
 
 // the page manager's pressed buttons, thiscall(manager): on the book, poster and journal Y ("Options") opens the
 // Xbox Live scene, which draws from nothing without Live; it opens the game's options as X does
-X86_EXTERN_FUNC(__imp__sub_00028CA0);
-X86_FUNC(sub_00028CA0) {
+X86_EXTERN_FUNC(__imp__sub_PageManagerButtons);
+X86_FUNC(sub_PageManagerButtons) {
     uint32_t page = kernel::R32(ctx.esp) == kFrontPressedReturn ? kernel::R32(ctx.esi + kFrontPage) : 0;
-    __imp__sub_00028CA0(ctx, base);
+    __imp__sub_PageManagerButtons(ctx, base);
     if (page >= kBook && page <= kJournal && (ctx.eax & kButtonY)) ctx.eax = (ctx.eax & ~kButtonY) | kButtonX;
 }
 
 // the pause page finds its buttons, thiscall(page): Xbox Live goes inactive, as the level map does without a map, so
 // the rows close up over it
-X86_EXTERN_FUNC(__imp__sub_0002FC00);
-X86_FUNC(sub_0002FC00) {
+X86_EXTERN_FUNC(__imp__sub_PausePageButtons);
+X86_FUNC(sub_PausePageButtons) {
     uint32_t page = ctx.ecx;
-    __imp__sub_0002FC00(ctx, base);
+    __imp__sub_PausePageButtons(ctx, base);
     uint32_t live = kernel::R32(page + kPauseLiveButton);
     if (!live) return;
     uint32_t eax = ctx.eax;

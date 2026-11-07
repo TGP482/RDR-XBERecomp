@@ -60,36 +60,36 @@ bool InPlay() {
 }  // namespace
 
 // a viewport's projection from its camera, thiscall(viewport, clear) ret 4
-X86_EXTERN_FUNC(__imp__sub_00052A70);
-X86_FUNC(sub_00052A70) {
+X86_EXTERN_FUNC(__imp__sub_ViewportProjection);
+X86_FUNC(sub_ViewportProjection) {
     FollowOutputShape();
     uint32_t camera = R32(ctx.ecx + kViewportCamera);
     float scale = FovScale();
     if (!camera || scale == 1.0f || !InPlay()) {
-        __imp__sub_00052A70(ctx, base);
+        __imp__sub_ViewportProjection(ctx, base);
         return;
     }
     float& fov = G<float>(camera + kCameraFov);
     float game = fov;
     fov = 2.0f * std::atan(std::tan(game * 0.5f) * scale);
-    __imp__sub_00052A70(ctx, base);
+    __imp__sub_ViewportProjection(ctx, base);
     fov = game;
 }
 
 // a grass field's footprint in the drawn view, thiscall(field, footprint, view) ret 8: its half width is
 // tan(angle) / 2, so the angle is set for that to widen by the same scale
-X86_EXTERN_FUNC(__imp__sub_0012B6E0);
-X86_FUNC(sub_0012B6E0) {
+X86_EXTERN_FUNC(__imp__sub_GrassFootprint);
+X86_FUNC(sub_GrassFootprint) {
     uint32_t view = R32(kViews + R32(kView) * 4);
     uint32_t camera = view ? R32(view) : 0;
     float scale = FovScale();
     if (!camera || scale == 1.0f || !InPlay()) {
-        __imp__sub_0012B6E0(ctx, base);
+        __imp__sub_GrassFootprint(ctx, base);
         return;
     }
     float& fov = G<float>(R32(camera + kCameraFovSource));
     float game = fov;
     fov = std::atan(std::tan(game) * scale);
-    __imp__sub_0012B6E0(ctx, base);
+    __imp__sub_GrassFootprint(ctx, base);
     fov = game;
 }

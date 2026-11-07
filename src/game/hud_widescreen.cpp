@@ -141,25 +141,25 @@ void EndMiddle() {
         EndElement(element);           \
     }
 
-HUD_ELEMENT(sub_001D60E0)
-HUD_ELEMENT(sub_001D75A0)
-HUD_ELEMENT(sub_001D8D60)
-HUD_ELEMENT(sub_001D96D0)
-HUD_ELEMENT(sub_001DE080)
-HUD_ELEMENT(sub_001DEF00)
-HUD_ELEMENT(sub_001E42D0)
-HUD_ELEMENT(sub_001E54D0)
-HUD_ELEMENT(sub_001E7FB0)
+HUD_ELEMENT(sub_HudDontShoot)
+HUD_ELEMENT(sub_HudMoney)
+HUD_ELEMENT(sub_HudNames)
+HUD_ELEMENT(sub_HudPauseScroll)
+HUD_ELEMENT(sub_HudGoals)
+HUD_ELEMENT(sub_HudHitArrows)
+HUD_ELEMENT(sub_HudHealth)
+HUD_ELEMENT(sub_HudAmmo)
+HUD_ELEMENT(sub_HudCrosshair)
 
 // the bridge's cannon counts, thiscall(hud, ...): each team's icon and count goes to its own side
 static Element g_cannons[2];
 static Element* g_cannon = nullptr;
 
-X86_EXTERN_FUNC(__imp__sub_001D5000);
-X86_FUNC(sub_001D5000) {
+X86_EXTERN_FUNC(__imp__sub_HudCannon);
+X86_FUNC(sub_HudCannon) {
     g_cannon = &g_cannons[0];
     BeginElement(*g_cannon);
-    __imp__sub_001D5000(ctx, base);
+    __imp__sub_HudCannon(ctx, base);
     EndElement(*g_cannon);
 }
 
@@ -172,12 +172,12 @@ void CannonCountSecondTeam(X86Context&, uint8_t*) {
 
 // a health bar and its name, cdecl(enemy, place, ...), drawn by sub_001D9550: the enemies' (bosses') and the allies'
 // each go to their own side
-X86_EXTERN_FUNC(__imp__sub_001D8F60);
-X86_FUNC(sub_001D8F60) {
+X86_EXTERN_FUNC(__imp__sub_HudHealthBar);
+X86_FUNC(sub_HudHealthBar) {
     static Element bars[2];
     Element& bar = bars[R32(ctx.esp + 4) ? 1 : 0];
     BeginElement(bar);
-    __imp__sub_001D8F60(ctx, base);
+    __imp__sub_HudHealthBar(ctx, base);
     EndElement(bar);
 }
 
@@ -186,29 +186,29 @@ constexpr uint32_t kHudShape = 0x416BBC;
 constexpr uint32_t kViewportShape = 0x413D18;
 
 // the letterbox, thiscall(hud): its bars and torn edges already span the screen, kept
-X86_EXTERN_FUNC(__imp__sub_001D7120);
-X86_FUNC(sub_001D7120) {
+X86_EXTERN_FUNC(__imp__sub_HudLetterbox);
+X86_FUNC(sub_HudLetterbox) {
     float hud_shape = G<float>(kHudShape);
     G<float>(kHudShape) = G<float>(kViewportShape);
     xdk::BeginInlineKeep();
-    __imp__sub_001D7120(ctx, base);
+    __imp__sub_HudLetterbox(ctx, base);
     xdk::EndInlineKeep();
     G<float>(kHudShape) = hud_shape;
 }
 
 // the lock reticle, thiscall(reticle): centred on its target in the 3D view, kept
-X86_EXTERN_FUNC(__imp__sub_001E2330);
-X86_FUNC(sub_001E2330) {
+X86_EXTERN_FUNC(__imp__sub_LockReticle);
+X86_FUNC(sub_LockReticle) {
     xdk::BeginInlineKeep();
-    __imp__sub_001E2330(ctx, base);
+    __imp__sub_LockReticle(ctx, base);
     xdk::EndInlineKeep();
 }
 
 // the journal's draw over the 3D book, thiscall(page): its widgets and Flash already fit the book, kept
-X86_EXTERN_FUNC(__imp__sub_00037970);
-X86_FUNC(sub_00037970) {
+X86_EXTERN_FUNC(__imp__sub_JournalDraw);
+X86_FUNC(sub_JournalDraw) {
     xdk::BeginInlineKeep();
-    __imp__sub_00037970(ctx, base);
+    __imp__sub_JournalDraw(ctx, base);
     xdk::EndInlineKeep();
 }
 
@@ -222,21 +222,21 @@ static bool OnPicture(uint32_t page) {
 }
 
 // a swui page's widgets, thiscall(page)
-X86_EXTERN_FUNC(__imp__sub_00019CC0);
-X86_FUNC(sub_00019CC0) {
+X86_EXTERN_FUNC(__imp__sub_PageWidgets);
+X86_FUNC(sub_PageWidgets) {
     uint32_t vtable = R32(ctx.ecx);
     bool popup = vtable == kWarningFrontendVtable || vtable == kDifficultyVtable;
     bool narrow = vtable == kFrontendButtonsVtable || popup || OnPicture(ctx.ecx);
     if (narrow) BeginMiddle();
-    __imp__sub_00019CC0(ctx, base);
+    __imp__sub_PageWidgets(ctx, base);
     if (narrow) EndMiddle();
 }
 
 // a page's IPU background, fastcall(image): a whole screen 4:3 picture (options_bg_10k), narrowed over black
-X86_EXTERN_FUNC(__imp__sub_000217D0);
-X86_FUNC(sub_000217D0) {
+X86_EXTERN_FUNC(__imp__sub_PageBackground);
+X86_FUNC(sub_PageBackground) {
     if (!app::Wide() || !R32(ctx.ecx + kImageTexture)) {
-        __imp__sub_000217D0(ctx, base);
+        __imp__sub_PageBackground(ctx, base);
         return;
     }
     uint32_t image = ctx.ecx;
@@ -244,36 +244,36 @@ X86_FUNC(sub_000217D0) {
     xdk::EndInlineSide();
     xdk::BeginInlineSide(0, xdk::Fit::Whole);
     ctx.ecx = image;
-    __imp__sub_000217D0(ctx, base);
+    __imp__sub_PageBackground(ctx, base);
     xdk::EndInlineSide();
     if (g_depth > 0) xdk::BeginInlineSide(0);
 }
 
 // a Flash movie's draw, thiscall(movie); the load show's (the level's results, the shop) are whole 4:3 pictures on
 // the frame it clears black
-X86_EXTERN_FUNC(__imp__sub_000188A0);
-X86_FUNC(sub_000188A0) {
+X86_EXTERN_FUNC(__imp__sub_FlashMovieDraw);
+X86_FUNC(sub_FlashMovieDraw) {
     if (game::TitleHidden()) {
         ctx.esp += 4;  // ret
         return;
     }
     if (g_depth == 0 && game::InLoadShow()) {
         xdk::BeginInlineSide(0, xdk::Fit::Whole);
-        __imp__sub_000188A0(ctx, base);
+        __imp__sub_FlashMovieDraw(ctx, base);
         xdk::EndInlineSide();
         return;
     }
     BeginMiddle();
-    __imp__sub_000188A0(ctx, base);
+    __imp__sub_FlashMovieDraw(ctx, base);
     EndMiddle();
 }
 
 // a load show frame, cdecl(looping): from the front end its state is still FrontEnd, which narrows only the hooked
 // draws, so its 2D narrows as after a level
-X86_EXTERN_FUNC(__imp__sub_00067590);
-X86_FUNC(sub_00067590) {
+X86_EXTERN_FUNC(__imp__sub_LoadShowFrame);
+X86_FUNC(sub_LoadShowFrame) {
     xdk::BeginInlineLevel();
-    __imp__sub_00067590(ctx, base);
+    __imp__sub_LoadShowFrame(ctx, base);
     xdk::EndInlineLevel();
 }
 
@@ -286,36 +286,36 @@ constexpr uint32_t kClearTarget = 0xF0;
 
 // the legal screen's picture (rdrlogoshot), 4:3, drawn over the whole screen; before a level the front end's last
 // frame is still there, so the sides clear black first
-X86_EXTERN_FUNC(__imp__sub_0005EB40);
-X86_FUNC(sub_0005EB40) {
+X86_EXTERN_FUNC(__imp__sub_LogoPicture);
+X86_FUNC(sub_LogoPicture) {
     if (game::TitleHidden()) {
         ctx.esp += 4;  // ret
         return;
     }
     if (g_depth > 0) {
-        __imp__sub_0005EB40(ctx, base);
+        __imp__sub_LogoPicture(ctx, base);
         return;
     }
     if (app::Wide()) CallGuest(ctx, kClear, {kClearTarget, 0xFF000000u, 0, 0});
     xdk::BeginInlineSide(0, xdk::Fit::Whole);
-    __imp__sub_0005EB40(ctx, base);
+    __imp__sub_LogoPicture(ctx, base);
     xdk::EndInlineSide();
 }
 
 // A full screen movie's picture, thiscall(movie, x, y) ret 8, drawn by sub_00070F60. The game fills the 4:3 screen
 // with the movie's 4:3 frame, so a widescreen display stretches it. FMV SCALE's Fill zooms the frame as far as its
 // black bars allow instead; 4:3 narrows the game's picture to 4:3 as the legal screen's. The Rockstar logo stays 4:3.
-X86_EXTERN_FUNC(__imp__sub_001F86D0);
-X86_FUNC(sub_001F86D0) {
+X86_EXTERN_FUNC(__imp__sub_MoviePicture);
+X86_FUNC(sub_MoviePicture) {
     bool logo = R32(ctx.esp) == kMovieDrawReturn && R32(ctx.esp + 0xC) == kLogoLoopReturn;
     if (!app::Wide()) {
-        __imp__sub_001F86D0(ctx, base);
+        __imp__sub_MoviePicture(ctx, base);
         return;
     }
     if (logo || app::Rdr().fmv_scale == 1) {
         DrawBlackScreen(ctx, R32(ctx.esp + 4), R32(ctx.esp + 8));
         xdk::BeginInlineSide(0, xdk::Fit::Whole);
-        __imp__sub_001F86D0(ctx, base);
+        __imp__sub_MoviePicture(ctx, base);
         xdk::EndInlineSide();
         return;
     }
@@ -333,10 +333,10 @@ constexpr uint32_t kMinusTen = 0xC1200000;
 constexpr uint32_t kTen = 0x41200000;
 
 // the tutorial controller's making, thiscall(controller)
-X86_EXTERN_FUNC(__imp__sub_001E0250);
-X86_FUNC(sub_001E0250) {
+X86_EXTERN_FUNC(__imp__sub_TutorialControllerMake);
+X86_FUNC(sub_TutorialControllerMake) {
     uint32_t controller = ctx.ecx;
-    __imp__sub_001E0250(ctx, base);
+    __imp__sub_TutorialControllerMake(ctx, base);
     if (!app::Wide()) return;
     uint32_t made = ctx.eax;
     float shape = app::OutputAspect();
@@ -364,17 +364,17 @@ static int ControllerSide(uint32_t controller) {
 
 // the tutorial's controller, thiscall(controller), vtable 0x3F5850 slot 6: the game keeps its shape on 16:9 but lays
 // it out from the middle, so it moves against the side of where it is going; not drawn on the keyboard and mouse
-X86_EXTERN_FUNC(__imp__sub_001E03C0);
-X86_FUNC(sub_001E03C0) {
+X86_EXTERN_FUNC(__imp__sub_TutorialControllerDraw);
+X86_FUNC(sub_TutorialControllerDraw) {
     if (input::KeyboardActive()) {
         ctx.esp += 4;  // ret
         return;
     }
     if (g_depth > 0) {
-        __imp__sub_001E03C0(ctx, base);
+        __imp__sub_TutorialControllerDraw(ctx, base);
         return;
     }
     xdk::BeginInlineSide(ControllerSide(ctx.ecx), xdk::Fit::Shift);
-    __imp__sub_001E03C0(ctx, base);
+    __imp__sub_TutorialControllerDraw(ctx, base);
     xdk::EndInlineSide();
 }

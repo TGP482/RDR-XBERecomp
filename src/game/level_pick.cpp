@@ -78,13 +78,13 @@ uint32_t SwitchState(X86Context& ctx, uint32_t from, uint32_t to) {
 }  // namespace
 
 // one step of the game's state machine, no arguments: on the front end or in a level a pick loads instead
-X86_EXTERN_FUNC(__imp__sub_0005E7E0);
-X86_FUNC(sub_0005E7E0) {
+X86_EXTERN_FUNC(__imp__sub_StateMachineStep);
+X86_FUNC(sub_StateMachineStep) {
     uint32_t state = R32(kCurrentState);
     bool loadable = state == R32(kFrontEndState) || state == R32(kGameState);
     uint32_t entry = loadable ? app::TakeLevelPick() : 0;
     if (!entry) {
-        __imp__sub_0005E7E0(ctx, base);
+        __imp__sub_StateMachineStep(ctx, base);
         return;
     }
     StartSession(ctx, R32(entry + kLevelName), R32(entry + kLevelSublevel));

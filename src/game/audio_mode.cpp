@@ -58,32 +58,32 @@ void UpdateRow(X86Context& ctx, uint32_t page) {
 }  // namespace
 
 // the sound engine's speaker mode, cdecl(mode): always the output's, from the engine's start on
-X86_EXTERN_FUNC(__imp__sub_00282BB0);
-X86_FUNC(sub_00282BB0) {
+X86_EXTERN_FUNC(__imp__sub_SetSpeakerMode);
+X86_FUNC(sub_SetSpeakerMode) {
     W32(ctx.esp + 4, Speakers());
     UpdateProfile();
-    __imp__sub_00282BB0(ctx, base);
+    __imp__sub_SetSpeakerMode(ctx, base);
 }
 
 // the sound options page opens, thiscall(page): its Audio Mode row reads the profile's
-X86_EXTERN_FUNC(__imp__sub_000304F0);
-X86_FUNC(sub_000304F0) {
+X86_EXTERN_FUNC(__imp__sub_SoundPageOpen);
+X86_FUNC(sub_SoundPageOpen) {
     UpdateProfile();
-    __imp__sub_000304F0(ctx, base);
+    __imp__sub_SoundPageOpen(ctx, base);
 }
 
 // the sound options page's draw, thiscall(page)
-X86_EXTERN_FUNC(__imp__sub_000303F0);
-X86_FUNC(sub_000303F0) {
+X86_EXTERN_FUNC(__imp__sub_SoundPageDraw);
+X86_FUNC(sub_SoundPageDraw) {
     uint32_t page = ctx.ecx;
     UpdateRow(ctx, page);
     ctx.ecx = page;
-    __imp__sub_000303F0(ctx, base);
+    __imp__sub_SoundPageDraw(ctx, base);
 }
 
 // the Audio Mode row changed, thiscall(page): the pick becomes AUDIO MODE, then the game applies it
-X86_EXTERN_FUNC(__imp__sub_00030400);
-X86_FUNC(sub_00030400) {
+X86_EXTERN_FUNC(__imp__sub_AudioModeChanged);
+X86_FUNC(sub_AudioModeChanged) {
     uint32_t combo = R32(ctx.ecx + kAudioModeCombo);
     uint32_t picked = combo ? R32(combo + kComboPicked) : 0;
     if (combo && picked < std::size(kRowOutputs)) {
@@ -91,5 +91,5 @@ X86_FUNC(sub_00030400) {
         audio::SetOutputMode(app::Rdr().audio_output);
         app::Save();
     }
-    __imp__sub_00030400(ctx, base);
+    __imp__sub_AudioModeChanged(ctx, base);
 }

@@ -18,21 +18,21 @@ bool g_title_hidden = false;
 bool game::TitleHidden() { return g_title_hidden; }
 
 // plays rslogo.bik and waits for its end, fastcall with nothing to return
-X86_EXTERN_FUNC(__imp__sub_00017940);
-X86_FUNC(sub_00017940) {
+X86_EXTERN_FUNC(__imp__sub_PlayRockstarLogo);
+X86_FUNC(sub_PlayRockstarLogo) {
     if (!app::Rdr().skip_intros) {
-        __imp__sub_00017940(ctx, base);
+        __imp__sub_PlayRockstarLogo(ctx, base);
         return;
     }
     ctx.esp += 4;  // ret
 }
 
 // opens a movie, cdecl(names, count, ...), 1 once playing; at 0 the boot's titles loop ends on its first frame
-X86_EXTERN_FUNC(__imp__sub_00071080);
-X86_FUNC(sub_00071080) {
+X86_EXTERN_FUNC(__imp__sub_OpenMovie);
+X86_FUNC(sub_OpenMovie) {
     uint32_t name = R32(R32(ctx.esp + 4));
     if (!app::Rdr().skip_intros || name != kTitlesMovie) {
-        __imp__sub_00071080(ctx, base);
+        __imp__sub_OpenMovie(ctx, base);
         return;
     }
     ctx.eax = 0;
@@ -40,10 +40,10 @@ X86_FUNC(sub_00071080) {
 }
 
 // a Flash movie variable, thiscall(movie, name, out) ret 8, true when set: the boot waits on playerChoice
-X86_EXTERN_FUNC(__imp__sub_000189E0);
-X86_FUNC(sub_000189E0) {
+X86_EXTERN_FUNC(__imp__sub_FlashGetVariable);
+X86_FUNC(sub_FlashGetVariable) {
     if (!app::Rdr().skip_intros || R32(ctx.esp + 4) != kPlayerChoice) {
-        __imp__sub_000189E0(ctx, base);
+        __imp__sub_FlashGetVariable(ctx, base);
         return;
     }
     W32(R32(ctx.esp + 8), 1);
@@ -52,9 +52,9 @@ X86_FUNC(sub_000189E0) {
 }
 
 // the titles video, legal and press start screens, fastcall with nothing to return
-X86_EXTERN_FUNC(__imp__sub_00017BC0);
-X86_FUNC(sub_00017BC0) {
+X86_EXTERN_FUNC(__imp__sub_TitleScreens);
+X86_FUNC(sub_TitleScreens) {
     g_title_hidden = app::Rdr().skip_intros;
-    __imp__sub_00017BC0(ctx, base);
+    __imp__sub_TitleScreens(ctx, base);
     g_title_hidden = false;
 }

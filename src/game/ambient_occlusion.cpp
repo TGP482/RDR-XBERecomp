@@ -22,8 +22,8 @@ uint32_t g_done[kViews] = {};  // the frame count each view last had it at, plus
 }  // namespace
 
 // a bucket's draw, thiscall(bucket, order)
-X86_EXTERN_FUNC(__imp__sub_00051830);
-X86_FUNC(sub_00051830) {
+X86_EXTERN_FUNC(__imp__sub_BucketDraw);
+X86_FUNC(sub_BucketDraw) {
     uint32_t mode = app::Rdr().ambient_occlusion;
     uint32_t view = R32(kView);
     if (view >= kViews) view = 0;
@@ -33,5 +33,5 @@ X86_FUNC(sub_00051830) {
         g_done[view] = frame;
         xdk::Occlusion(mode == 2);
     }
-    __imp__sub_00051830(ctx, base);
+    __imp__sub_BucketDraw(ctx, base);
 }

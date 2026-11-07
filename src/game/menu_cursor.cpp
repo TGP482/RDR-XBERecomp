@@ -375,17 +375,17 @@ void UpdateRewardMenuHover(X86Context& ctx, uint32_t movie) {
 }  // namespace
 
 // a page's update, thiscall(page, ?) ret 4, before its input
-X86_EXTERN_FUNC(__imp__sub_0001AE90);
-X86_FUNC(sub_0001AE90) {
+X86_EXTERN_FUNC(__imp__sub_PageUpdate);
+X86_FUNC(sub_PageUpdate) {
     uint32_t page = ctx.ecx;
     if (G<uint8_t>(page + kActive)) UpdateHover(ctx, page);
     ctx.ecx = page;
-    __imp__sub_0001AE90(ctx, base);
+    __imp__sub_PageUpdate(ctx, base);
 }
 
 // the book's page into its texture, thiscall(book, texture, page) ret 8, before the book is drawn with it
-X86_EXTERN_FUNC(__imp__sub_00042400);
-X86_FUNC(sub_00042400) {
+X86_EXTERN_FUNC(__imp__sub_BookPageTexture);
+X86_FUNC(sub_BookPageTexture) {
     UpdateBookDrawn(ctx.ecx);
     uint32_t texture = R32(ctx.ecx + kBookTexture);
     uint32_t source = texture ? R32(texture + kTextureSource) : 0;
@@ -393,24 +393,24 @@ X86_FUNC(sub_00042400) {
     float y = 0.0f;
     bool at = input::MenuCursorAt(x, y);
     xdk::SetPick(at && source ? R32(source + kSourceD3D) : 0, x, y);
-    __imp__sub_00042400(ctx, base);
+    __imp__sub_BookPageTexture(ctx, base);
 }
 
 // the popups' update, fastcall(popup): boot, load and save, each through its own
-X86_EXTERN_FUNC(__imp__sub_000193D0);
-X86_FUNC(sub_000193D0) {
+X86_EXTERN_FUNC(__imp__sub_PopupsUpdate);
+X86_FUNC(sub_PopupsUpdate) {
     uint32_t popup = ctx.ecx;
     UpdatePopupHover(ctx);
     ctx.ecx = popup;
-    __imp__sub_000193D0(ctx, base);
+    __imp__sub_PopupsUpdate(ctx, base);
 }
 
 // a Flash movie's update, thiscall(movie, seconds) ret 4: its script reads the buttons
-X86_EXTERN_FUNC(__imp__sub_00018870);
-X86_FUNC(sub_00018870) {
+X86_EXTERN_FUNC(__imp__sub_FlashMovieUpdate);
+X86_FUNC(sub_FlashMovieUpdate) {
     uint32_t movie = ctx.ecx;
     UpdateLevelMenuHover(ctx, movie);
     UpdateRewardMenuHover(ctx, movie);
     ctx.ecx = movie;
-    __imp__sub_00018870(ctx, base);
+    __imp__sub_FlashMovieUpdate(ctx, base);
 }
