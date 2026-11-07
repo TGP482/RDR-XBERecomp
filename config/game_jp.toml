@@ -433,6 +433,7 @@ PausePageButtons                                     = 0x2FC60
 PlayRockstarLogo                                     = 0x178F0
 PlayerLook                                           = 0x1439D0
 PopupsUpdate                                         = 0x19370
+ProfilePageDraw                                      = 0x34000
 ProfilePageInput                                     = 0x34520
 ReleaseTarget                                        = 0x13DC40
 ResetSession                                         = 0x40130

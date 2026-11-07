@@ -1,8 +1,8 @@
 // Widescreen HUD: the game's 4:3 2D keeps its shape in the middle of the screen (d3d/d3d8.cpp), and each HUD element
 // goes to the side of the screen it sat on last frame, so the HUD keeps to the screen's edges. In the front end only the
-// button prompts, the warning popups, the difficulty select, the Flash movies (title, shop, upgrades) and the pages on a
-// 4:3 picture (options) narrow, in the middle; the legal screen's and those pages' pictures narrow over black anywhere.
-// Full screen movies follow FMV SCALE.
+// button prompts, the warning popups, the difficulty select, the profile page, the Flash movies (title, shop, upgrades)
+// and the pages on a 4:3 picture (options) narrow, in the middle; the legal screen's and those pages' pictures narrow
+// over black anywhere. Full screen movies follow FMV SCALE.
 #include <bit>
 #include <cstring>
 
@@ -14,6 +14,7 @@
 #include "game/boot.h"
 #include "game/load_show.h"
 #include "game/prompts.h"
+#include "game/watermark.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -234,6 +235,34 @@ X86_FUNC(sub_PageWidgets) {
     __imp__sub_PageWidgets(ctx, base);
     if (narrow) EndMiddle();
     if (buttons) game::EndPromptBar();
+}
+
+// a text element's draw, fastcall(element): the main menu's watermark goes to its side as a HUD element
+X86_EXTERN_FUNC(__imp__sub_TextElementDraw);
+X86_FUNC(sub_TextElementDraw) {
+    static Element watermark;
+    if (!game::IsWatermark(ctx.ecx)) {
+        __imp__sub_TextElementDraw(ctx, base);
+        return;
+    }
+    BeginElement(watermark);
+    __imp__sub_TextElementDraw(ctx, base);
+    EndElement(watermark);
+}
+
+// the console's 16:9 flag (game/fov.cpp)
+constexpr hle::Va kWide = SYM(Wide);
+
+// The profile page's draw, thiscall(page): its widgets, then the name grid's letters, narrowed. Its 16:9 path (40
+// pixels right, a 2D scale of 1) is the console's own for its 640 wide screen, left out.
+X86_EXTERN_FUNC(__imp__sub_ProfilePageDraw);
+X86_FUNC(sub_ProfilePageDraw) {
+    uint8_t wide = G<uint8_t>(kWide);
+    G<uint8_t>(kWide) = 0;
+    BeginMiddle();
+    __imp__sub_ProfilePageDraw(ctx, base);
+    EndMiddle();
+    G<uint8_t>(kWide) = wide;
 }
 
 // a page's IPU background, fastcall(image): a whole screen 4:3 picture (options_bg_10k), narrowed over black

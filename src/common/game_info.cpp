@@ -6,7 +6,7 @@
 // what the runtime asks of the game; strings must be set, hooks may stay null
 const app::GameInfo app::kGame = {
     .title = L"Red Dead Revolver - XBE Recomp", // window, splash and compiler
-    .short_title = L"RDR",                // message boxes
+    .short_title = L"Red Dead Revolver - XBE Recomp",  // message boxes
     .name = L"RDR",                       // window classes, crash dumps, handover event
     .log = "rdr",                         // log file prefix
     .settings = "settings.toml",          // settings file beside the exe
