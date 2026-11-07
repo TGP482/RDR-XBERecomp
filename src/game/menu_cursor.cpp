@@ -249,14 +249,30 @@ struct MovieRows {
     int count;
 };
 
+// a movie's definition and root object, 0 without a player
+struct MovieParts {
+    uint32_t def = 0;
+    uint32_t root = 0;
+};
+
+MovieParts PartsOf(uint32_t movie) {
+    uint32_t player = R32(movie + kMoviePlayer);
+    if (!player) return {};
+    return {R32(player + kPlayerMovie), R32(player + kPlayerRoot)};
+}
+
 // the row under the cursor, nearest when past the ends
-int RowUnder(uint32_t movie, const MovieRows& rows, float y) {
-    uint32_t def = R32(R32(movie + kMoviePlayer) + kPlayerMovie);
+int RowUnder(uint32_t def, const MovieRows& rows, float y) {
     float scale = G<float>(rows.clip + kWorldScaleY);
     float row0 = float(rows.first) * scale + G<float>(rows.clip + kWorldY);
     float step = float(rows.line) * scale;
     float cursor = y * G<float>(def + kMovieHeight);
     return std::clamp(int(std::lround((cursor - row0) / step)), 0, rows.count - 1);
+}
+
+void Select(X86Context& ctx, uint32_t movie, uint32_t selection, int row) {
+    ctx.ecx = movie;
+    CallGuest(ctx, kSetGlobal, {selection, uint32_t(row)});
 }
 
 void UpdatePopupHover(X86Context& ctx) {
@@ -267,20 +283,16 @@ void UpdatePopupHover(X86Context& ctx) {
     float x = 0.0f;
     float y = 0.0f;
     if (!movie || !G<uint8_t>(movie + kMovieLoaded) || !input::MenuCursorAt(x, y) || !UpdateSeen(movie, x, y)) return;
-    uint32_t player = R32(movie + kMoviePlayer);
-    uint32_t def = player ? R32(player + kPlayerMovie) : 0;
-    uint32_t root = player ? R32(player + kPlayerRoot) : 0;
-    uint32_t screens = root ? ChildNamed(root, "theScreens") : 0;
-    if (!def || !screens) return;
+    MovieParts parts = PartsOf(movie);
+    uint32_t screens = parts.root ? ChildNamed(parts.root, "theScreens") : 0;
+    if (!parts.def || !screens) return;
     int current = 0;
     int first = 0;
     int offset = 0;
     bool found = GetGlobal(ctx, movie, selection, current) && GetGlobal(ctx, movie, top, first);
     if (!found || !GetGlobal(ctx, movie, line, offset) || offset == 0) return;
-    int hovered = RowUnder(movie, {screens, first, offset, kPopupChoices}, y);
-    if (hovered == current) return;
-    ctx.ecx = movie;
-    CallGuest(ctx, kSetGlobal, {selection, uint32_t(hovered)});
+    int hovered = RowUnder(parts.def, {screens, first, offset, kPopupChoices}, y);
+    if (hovered != current) Select(ctx, movie, selection, hovered);
 }
 
 // The pre-level menu's choices, 0 to SelectMax, Shop gone in a bounty: its hand's y in the clip holding the slots,
@@ -296,11 +308,9 @@ void UpdateLevelMenuHover(X86Context& ctx, uint32_t movie) {
     int mode = 0;
     if (!game::InLoadShow() || !G<uint8_t>(movie + kMovieLoaded) || !GetGlobal(ctx, movie, bounty, mode)) return;
     if (!input::MenuCursorAt(x, y) || !UpdateSeen(movie, x, y)) return;
-    uint32_t player = R32(movie + kMoviePlayer);
-    uint32_t def = player ? R32(player + kPlayerMovie) : 0;
-    uint32_t root = player ? R32(player + kPlayerRoot) : 0;
-    uint32_t slots = root ? ParentOfChild(root, "slot0") : 0;
-    if (!def || !slots) return;
+    MovieParts parts = PartsOf(movie);
+    uint32_t slots = parts.root ? ParentOfChild(parts.root, "slot0") : 0;
+    if (!parts.def || !slots) return;
     int current = 0;
     int first = 0;
     int offset = 0;
@@ -308,10 +318,8 @@ void UpdateLevelMenuHover(X86Context& ctx, uint32_t movie) {
     bool found = GetGlobal(ctx, movie, selection, current) && GetGlobal(ctx, movie, top, first);
     found = found && GetGlobal(ctx, movie, line, offset) && GetGlobal(ctx, movie, last, max);
     if (!found || offset == 0 || max < 0) return;
-    int hovered = RowUnder(movie, {slots, first, offset, max + 1}, y);
-    if (hovered == current) return;
-    ctx.ecx = movie;
-    CallGuest(ctx, kSetGlobal, {selection, uint32_t(hovered)});
+    int hovered = RowUnder(parts.def, {slots, first, offset, max + 1}, y);
+    if (hovered != current) Select(ctx, movie, selection, hovered);
 }
 
 // The level's end menu: rewardMenu's slots, Continue, Replay and Quit down the page (no Quit in noQuit), curMenSel
@@ -334,17 +342,15 @@ void UpdateRewardMenuHover(X86Context& ctx, uint32_t movie) {
     GetGlobal(ctx, movie, third, confirming_again);
     if (!GetGlobal(ctx, movie, shown, on) || !on || confirming || confirming_again) return;
     if (!input::MenuCursorAt(x, y) || !UpdateSeen(movie, x, y)) return;
-    uint32_t player = R32(movie + kMoviePlayer);
-    uint32_t def = player ? R32(player + kPlayerMovie) : 0;
-    uint32_t root = player ? R32(player + kPlayerRoot) : 0;
-    uint32_t holder = root ? ParentOfChild(root, "rewardMenu") : 0;
+    MovieParts parts = PartsOf(movie);
+    uint32_t holder = parts.root ? ParentOfChild(parts.root, "rewardMenu") : 0;
     uint32_t menu = holder ? ChildNamed(holder, "rewardMenu") : 0;
     int current = 0;
     int quit_gone = 0;
-    if (!def || !menu || !GetGlobal(ctx, movie, selection, current)) return;
+    if (!parts.def || !menu || !GetGlobal(ctx, movie, selection, current)) return;
     GetGlobal(ctx, movie, no_quit, quit_gone);
     int rows = quit_gone ? 2 : 3;
-    float cursor = y * G<float>(def + kMovieHeight);
+    float cursor = y * G<float>(parts.def + kMovieHeight);
     int hovered = 0;
     float nearest = std::numeric_limits<float>::max();
     for (int row = 0; row < rows; row++) {
@@ -357,9 +363,7 @@ void UpdateRewardMenuHover(X86Context& ctx, uint32_t movie) {
             hovered = row;
         }
     }
-    if (hovered == current) return;
-    ctx.ecx = movie;
-    CallGuest(ctx, kSetGlobal, {selection, uint32_t(hovered)});
+    if (hovered != current) Select(ctx, movie, selection, hovered);
 }
 
 }  // namespace
