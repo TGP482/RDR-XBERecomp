@@ -199,7 +199,7 @@ void UpdateHover(X86Context& ctx, uint32_t page) {
 }
 
 // the save popup's movie, loaded at +0x28; a movie's player, the player's root object and movie, the movie's height
-constexpr uint32_t kPopupMovie = 0x65DB48;
+constexpr hle::Va kPopupMovie = SYM(PopupMovie);
 constexpr uint32_t kMovieLoaded = 0x28;
 constexpr uint32_t kMoviePlayer = 0x24;
 constexpr uint32_t kPlayerRoot = 0x8;
@@ -213,8 +213,8 @@ constexpr uint32_t kNextSibling = 0x68;
 constexpr uint32_t kName = 0x6C;
 // a movie's _global number as an int, thiscall(movie, name, value out) ret 8, and its set, thiscall(movie, name,
 // value) ret 8, both false when there is none
-constexpr uint32_t kGetGlobal = 0x189E0;
-constexpr uint32_t kSetGlobal = 0x18A00;
+constexpr hle::Va kGetGlobal = SYM(FlashGetVariable);
+constexpr hle::Va kSetGlobal = SYM(SetGlobal);
 // its script's choices, 0 Yes and 1 No: the hand's y in theScreens, selectionVPos + currentSelection * menuLineOffset
 constexpr int kPopupChoices = 2;
 constexpr int kMaxDepth = 8;  // clips searched below a movie's root

@@ -15,7 +15,7 @@ namespace {
 constexpr uint32_t kSpeakersMono = 0x1F;
 constexpr uint32_t kSpeakersStereo = 0x20;
 constexpr uint32_t kSpeakersSurround = 0x22;
-constexpr uint32_t kProfile = 0x664260;
+constexpr hle::Va kProfile = SYM(Profile);
 constexpr uint32_t kProfileSpeakers = 0x44;
 // the sound options page's Audio Mode combo and its picked item, in the row's order
 constexpr uint32_t kAudioModeCombo = 0x458;
@@ -23,8 +23,8 @@ constexpr uint32_t kComboPicked = 0x1274;
 constexpr uint32_t kRowOutputs[] = {audio::kOutputStereo, audio::kOutputSurround, audio::kOutputMono};
 constexpr uint32_t kRowSpeakers[] = {kSpeakersStereo, kSpeakersSurround, kSpeakersMono};
 // the sound manager, its speaker mode thiscall(manager, mode) ret 4
-constexpr uint32_t kSoundManager = 0x6675E4;
-constexpr uint32_t kSetSpeakers = 0x99DC0;
+constexpr hle::Va kSoundManager = SYM(SoundManager);
+constexpr hle::Va kSetSpeakers = SYM(SetSpeakers);
 
 uint32_t Speakers() {
     switch (app::Rdr().audio_output) {

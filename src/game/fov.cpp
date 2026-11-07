@@ -17,24 +17,24 @@ constexpr uint32_t kViewportCamera = 0x30;
 constexpr uint32_t kCameraFov = 0x38;
 // the views (sub_001F3640), +0 each one's camera, and the view being drawn; camera: where its angle is read from,
 // its own by default (sub_001F4F20)
-constexpr uint32_t kViews = 0x687614;
-constexpr uint32_t kView = 0x65E778;
+constexpr hle::Va kViews = SYM(Views);
+constexpr hle::Va kView = SYM(View);
 constexpr uint32_t kCameraFovSource = 0x68;
 // set while the shutters close for a cutscene (sub_00052450)
-constexpr uint32_t kCinema = 0x65E7F0;
+constexpr hle::Va kCinema = SYM(Cinema);
 
 constexpr float kHalfDegree = 3.14159265f / 360.0f;
 
 // set from the console's video flags (sub_0017E370): widescreen, the 16:9 shape it gives the views, and the
 // viewports' shape over the screen's pixels
-constexpr uint32_t kWide = 0x683568;
-constexpr uint32_t kWideShape = 0x3D4DB4;
-constexpr uint32_t kViewportShape = 0x413D18;
-constexpr uint32_t kScreenWidth = 0x413C44;
-constexpr uint32_t kScreenHeight = 0x413C48;
+constexpr hle::Va kWide = SYM(Wide);
+constexpr hle::Va kWideShape = SYM(WideShape);
+constexpr hle::Va kViewportShape = SYM(ViewportShape);
+constexpr hle::Va kScreenWidth = SYM(ScreenWidth);
+constexpr hle::Va kScreenHeight = SYM(ScreenHeight);
 // the HUD's copy of the viewports' shape (sub_001DCA70), the scale of its 2D widths; its 2D shows at 4:3, so it lays
 // out the console's 640 wide screen across the screen's pixels as its positions do
-constexpr uint32_t kHudShape = 0x416BBC;
+constexpr hle::Va kHudShape = SYM(HudShape);
 constexpr float kConsoleWidth = 640.0f;
 
 void FollowOutputShape() {

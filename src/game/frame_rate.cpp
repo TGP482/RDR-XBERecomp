@@ -14,14 +14,14 @@ using namespace kernel;
 namespace {
 
 // the frame counter (sub_00084100 adds one a frame); the last frame's length in seconds
-constexpr uint32_t kFrameCount = 0x666738;
-constexpr uint32_t kFrameSeconds = 0x4109CC;
+constexpr hle::Va kFrameCount = SYM(GameFrameCount);
+constexpr hle::Va kFrameSeconds = SYM(FrameSeconds);
 // the game clock in seconds; the scaled step the game's timer (sub_00084100) adds to it
-constexpr uint32_t kGameClock = 0x66672C;
-constexpr uint32_t kClockStep = 0x4109A8;
+constexpr hle::Va kGameClock = SYM(GameClock);
+constexpr hle::Va kClockStep = SYM(ClockStep);
 // vertical blanks a console frame waits for, 0 with the novblank switch; a vertical blank's length in seconds
-constexpr uint32_t kBlanksPerFrame = 0x413C58;
-constexpr uint32_t kBlankSeconds = 0x41424C;
+constexpr hle::Va kBlanksPerFrame = SYM(BlanksPerFrame);
+constexpr hle::Va kBlankSeconds = SYM(BlankSeconds);
 // the most console frames one frame catches up
 constexpr double kMaxConsoleFrames = 6;
 

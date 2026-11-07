@@ -29,6 +29,7 @@
 #include "audio/audio.h"
 #include "core/input.h"
 #include "kernel/kernel.h"
+#include "xdk/hle.h"
 
 namespace app {
 
@@ -941,7 +942,7 @@ void BindRow(const Row& row) {
 
 // DEBUG page: invincibility, and a level list where a click loads the level and closes the panel
 
-constexpr uint32_t kLevelTable = 0x663440;  // LevelFlow's entries, a pointer each, empty slots null
+constexpr hle::Va kLevelTable = SYM(LevelTable);  // LevelFlow's entries, a pointer each, empty slots null
 constexpr int kLevelSlots = 40;
 // a LevelFlow entry
 constexpr uint32_t kLevelName = 0x0;

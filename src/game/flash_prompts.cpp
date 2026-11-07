@@ -53,11 +53,11 @@ constexpr uint8_t kVisible = 0x20;
 constexpr int kOne = 64;
 // shape: its vtable and draw commands, shorts: 0 ends, 1 lines and 2 triangles (a count, then x y in twips), 3 has
 // two more, 4 and 5 one
-constexpr uint32_t kShapeVtable = 0x3EBB44;
+constexpr hle::Va kShapeVtable = SYM(ShapeVtable);
 constexpr uint32_t kShapeCommands = 0x10;
 constexpr float kTwip = 0.05f;
 // button: its vtable, record count and records (state mask, matrix, colour, character), drawn up when not focused
-constexpr uint32_t kButtonVtable = 0x3EBB20;
+constexpr hle::Va kButtonVtable = SYM(ButtonVtable);
 constexpr uint32_t kButtonRecordCount = 0x9;
 constexpr uint32_t kButtonRecords = 0xC;
 constexpr uint32_t kRecordSize = 0x28;
@@ -67,11 +67,11 @@ constexpr uint8_t kUpState = 1;
 // static text: its commands
 constexpr uint32_t kTextCommands = 0x20;
 // text: the next glyph vertex, its screen x and y first; the colour the glyphs draw in, with the object's tint
-constexpr uint32_t kTextVertex = 0x6845F8;
-constexpr uint32_t kGlyphColour = 0x684610;
+constexpr hle::Va kTextVertex = SYM(TextVertex);
+constexpr hle::Va kGlyphColour = SYM(GlyphColour);
 // the movie being drawn: its pixels per unit across and down
-constexpr uint32_t kScaleX = 0x6855C4;
-constexpr uint32_t kScaleY = 0x6855E8;
+constexpr hle::Va kScaleX = SYM(ScaleX);
+constexpr hle::Va kScaleY = SYM(ScaleY);
 constexpr size_t kMaxChars = 31;
 
 struct Box {

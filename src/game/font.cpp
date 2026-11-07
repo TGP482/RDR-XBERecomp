@@ -5,11 +5,11 @@ using namespace kernel;
 namespace {
 
 // a packed font by name and tag (FNT0), cdecl; a loaded one, thiscall(list, name)
-constexpr uint32_t kFontName = 0x3CFDA0;
+constexpr hle::Va kFontName = SYM(FontName);
 constexpr uint32_t kFontTag = 0x30544E46;
-constexpr uint32_t kFindPackedFont = 0x84BB0;
-constexpr uint32_t kFindLoadedFont = 0x86FD0;
-constexpr uint32_t kLoadedFonts = 0x65EA94;
+constexpr hle::Va kFindPackedFont = SYM(FindPackedFont);
+constexpr hle::Va kFindLoadedFont = SYM(FindLoadedFont);
+constexpr hle::Va kLoadedFonts = SYM(LoadedFonts);
 
 }  // namespace
 

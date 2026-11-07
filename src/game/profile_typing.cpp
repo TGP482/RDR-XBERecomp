@@ -18,10 +18,10 @@ constexpr uint32_t kGridColumn = 0x470;
 constexpr uint32_t kPressed = 0x308;
 constexpr uint32_t kButtonA = 0x1000000;
 // the grid's columns; End's place in "ABCDEFGHIJKLMNOPQRSTUVWXYZ<>" then End
-constexpr uint32_t kGridColumns = 0x40E4FC;
+constexpr hle::Va kGridColumns = SYM(GridColumns);
 constexpr uint32_t kGridEnd = 28;
 // the grid's letter into the name, thiscall(page, letter) ret 4: '<' deletes, '>' a space
-constexpr uint32_t kEnterLetter = 0x34400;
+constexpr hle::Va kEnterLetter = SYM(EnterLetter);
 
 void EnterLetter(X86Context& ctx, uint32_t page, char letter) {
     ctx.ecx = page;

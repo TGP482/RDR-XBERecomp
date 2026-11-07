@@ -19,13 +19,13 @@ using namespace kernel;
 
 namespace {
 
-constexpr uint32_t kFrontendButtonsVtable = 0x3D3500;  // swuiPageFrontendButtons, the button prompts
-constexpr uint32_t kWarningFrontendVtable = 0x3D1C40;  // the front end's warning popups (new game over a save)
-constexpr uint32_t kDifficultyVtable = 0x3D1CF8;       // difficultyselect, the new game's NORMAL / HARD box
+constexpr hle::Va kFrontendButtonsVtable = SYM(FrontendButtonsVtable);  // swuiPageFrontendButtons, the button prompts
+constexpr hle::Va kWarningFrontendVtable = SYM(WarningFrontendVtable);  // the front end's warning popups (new game over a save)
+constexpr hle::Va kDifficultyVtable = SYM(DifficultyVtable);       // difficultyselect, the new game's NORMAL / HARD box
 // a swui page's widgets and their count; the IPU background image's vtable and texture
 constexpr uint32_t kPageWidgets = 0x40;
 constexpr uint32_t kPageWidgetCount = 0x298;
-constexpr uint32_t kImageVtable = 0x3D0E18;
+constexpr hle::Va kImageVtable = SYM(ImageVtable);
 constexpr uint32_t kImageTexture = 0x114;
 constexpr float kSide = 1.0f / 3;  // clip space: an element centred past this goes to its side
 constexpr float kFullWidth = 0.98f;
@@ -58,14 +58,14 @@ void EndElement(Element& e) {
 // draw's return in the Rockstar logo's loop (sub_00017940)
 constexpr uint32_t kMovieBink = 0x0;
 constexpr uint32_t kMovieTexture = 0x4;
-constexpr uint32_t kMovieDrawReturn = 0x70F74;
-constexpr uint32_t kLogoLoopReturn = 0x179FE;
+constexpr hle::Va kMovieDrawReturn = SYM(MovieDrawReturn);
+constexpr hle::Va kLogoLoopReturn = SYM(LogoLoopReturn);
 // stage 0's texture, cdecl(texture); a textured rect, cdecl(x0, y0, x1, y1, u0, v0, u1, v1, colour, 0, 0, 0) in
 // pixels; the screen's size
-constexpr uint32_t kSetTexture = 0x182AB0;
-constexpr uint32_t kDrawRect = 0x17D8B0;
-constexpr uint32_t kScreenWidth = 0x413C44;
-constexpr uint32_t kScreenHeight = 0x413C48;
+constexpr hle::Va kSetTexture = SYM(SetFirstStageTexture);
+constexpr hle::Va kDrawRect = SYM(DrawRect);
+constexpr hle::Va kScreenWidth = SYM(ScreenWidth);
+constexpr hle::Va kScreenHeight = SYM(ScreenHeight);
 // a movie's frame is NTSC 4:3 whatever its pixels
 constexpr float kMovieAspect = 4.0f / 3.0f;
 
@@ -82,7 +82,7 @@ struct MovieBars {
 };
 constexpr MovieBars kMovieBars[] = {{"titles", 66}, {"attract", 91}, {"slide01", 0}};
 constexpr uint32_t kCutsceneBars = 20;
-constexpr uint32_t kMovieName = 0x666558;  // the playing movie's name
+constexpr hle::Va kMovieName = SYM(MovieName);  // the playing movie's name
 
 uint32_t BarRows(uint32_t height) {
     const char* name = static_cast<const char*>(HostPtr(kMovieName));
@@ -182,8 +182,8 @@ X86_FUNC(sub_HudHealthBar) {
 }
 
 // the HUD's 2D width scale (game/fov.cpp), and the viewports' shape a kept draw scales by as the console does
-constexpr uint32_t kHudShape = 0x416BBC;
-constexpr uint32_t kViewportShape = 0x413D18;
+constexpr hle::Va kHudShape = SYM(HudShape);
+constexpr hle::Va kViewportShape = SYM(ViewportShape);
 
 // the letterbox, thiscall(hud): its bars and torn edges already span the screen, kept
 X86_EXTERN_FUNC(__imp__sub_HudLetterbox);
@@ -281,7 +281,7 @@ X86_FUNC(sub_LoadShowFrame) {
 bool LoadShowSunRound(X86Context&, uint8_t*) { return true; }
 
 // the screen's clear, cdecl(flags, colour, z, stencil)
-constexpr uint32_t kClear = 0x17D530;
+constexpr hle::Va kClear = SYM(Clear);
 constexpr uint32_t kClearTarget = 0xF0;
 
 // the legal screen's picture (rdrlogoshot), 4:3, drawn over the whole screen; before a level the front end's last
@@ -326,7 +326,7 @@ X86_FUNC(sub_MoviePicture) {
 // the tutorial controller's camera, thiscall(camera, left, right, bottom, top, near, far): its making sets x from
 // minus the wide shape to a fixed 16:9, so it is set again across the output's own shape
 constexpr uint32_t kControllerCamera = 0x4C;
-constexpr uint32_t kSetOrtho = 0x185FA0;
+constexpr hle::Va kSetOrtho = SYM(SetOrtho);
 constexpr uint32_t kMinusOne = 0xBF800000;
 constexpr uint32_t kOne = 0x3F800000;
 constexpr uint32_t kMinusTen = 0xC1200000;
@@ -349,7 +349,7 @@ X86_FUNC(sub_TutorialControllerMake) {
 
 // the tutorial controller's place, an index into the tuned positions (x, y, z) it moves to (sub_001E0030)
 constexpr uint32_t kControllerPlace = 0x50;
-constexpr uint32_t kControllerPositions = 0x686698;
+constexpr hle::Va kControllerPositions = SYM(ControllerPositions);
 constexpr uint32_t kPositionBytes = 0xC;
 
 // the side of the place it moves to, as on 4:3, so its whole move in keeps to that side

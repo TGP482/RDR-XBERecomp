@@ -9,7 +9,7 @@ namespace {
 constexpr uint32_t kStoredUsersBytes = 16 * 0x70;  // XONLINE_MAX_STORED_ONLINE_USERS of XONLINE_USER
 // the front end's update reads its pressed buttons here, the front end in esi; its page at +0x708, 1 to 3 the
 // book, the poster and the journal
-constexpr uint32_t kFrontPressedReturn = 0x40F97;
+constexpr hle::Va kFrontPressedReturn = SYM(FrontPressedReturn);
 constexpr uint32_t kFrontPage = 0x708;
 constexpr uint32_t kBook = 1;
 constexpr uint32_t kJournal = 3;

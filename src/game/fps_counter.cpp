@@ -14,16 +14,16 @@ using namespace game_font;
 namespace {
 
 // alpha blending on, cdecl(on); blend mode and alpha ref, cdecl(mode, ref); the current ones
-constexpr uint32_t kSetAlphaBlend = 0x182080;
-constexpr uint32_t kSetBlendMode = 0x182160;
-constexpr uint32_t kAlphaBlend = 0x6843B9;
-constexpr uint32_t kBlendMode = 0x68435C;
-constexpr uint32_t kAlphaRef = 0x6843A2;
+constexpr hle::Va kSetAlphaBlend = SYM(SetAlphaBlend);
+constexpr hle::Va kSetBlendMode = SYM(SetBlendMode);
+constexpr hle::Va kAlphaBlend = SYM(AlphaBlend);
+constexpr hle::Va kBlendMode = SYM(BlendMode);
+constexpr hle::Va kAlphaRef = SYM(AlphaRef);
 constexpr uint32_t kSourceAlpha = 0;  // the subtitles' mode and ref
 constexpr uint32_t kSubtitleRef = 0x80;
 // a stage's texture, cdecl(stage, texture); the offscreen target being drawn, 0 the back buffer
-constexpr uint32_t kSetTexture = 0x181B00;
-constexpr uint32_t kOffscreenTarget = 0x683580;
+constexpr hle::Va kSetTexture = SYM(SetStageTexture);
+constexpr hle::Va kOffscreenTarget = SYM(OffscreenTarget);
 
 // 640x480 pixels
 constexpr float kSize = 12;

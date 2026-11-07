@@ -27,19 +27,19 @@ using namespace kernel;
 namespace {
 
 // state machine: the current state, its +4 name; the game loop's running flag, 0 while paused
-constexpr uint32_t kCurrentState = 0x6664AC;
+constexpr hle::Va kCurrentState = SYM(CurrentState);
 constexpr uint32_t kStateName = 0x4;
-constexpr uint32_t kGameRunning = 0x40EA24;
+constexpr hle::Va kGameRunning = SYM(GameRunning);
 
 // the player's controller; its swioPad; the aim state (0 aiming, 1 not, 2 starting, 3 stopping); on a horse
-constexpr uint32_t kPlayer = 0x65EAD8;
+constexpr hle::Va kPlayer = SYM(Player);
 constexpr uint32_t kPlayerPad = 0x894;
 constexpr uint32_t kAimState = 0x600;
 constexpr uint32_t kOnHorse = 0x338;
 // player controller: the soft lock's two flags, set only when aiming soft locks a target (sub_00148D10); the game's
 // release of the player's target, thiscall(player, hud effect) ret 4
 constexpr uint32_t kSoftLockFlags = 0x6A9;
-constexpr uint32_t kReleaseTarget = 0x13D5F0;
+constexpr hle::Va kReleaseTarget = SYM(ReleaseTarget);
 // player controller look: its yaw and pitch (the duel reticle), the heading the aim turns, the flick boost of its turn
 // rate, the two headings it turns
 constexpr uint32_t kLookYaw = 0x67C;
@@ -53,13 +53,13 @@ constexpr uint32_t kPlayerParts = 0xC;
 constexpr uint32_t kPartsMover = 0x74;
 constexpr uint32_t kMoverState = 0x38;
 // the aim's turn rate a frame for a full stick: the base (the options' sensitivity) up to the most by the boost
-constexpr uint32_t kAimRateMost = 0x413654;
-constexpr uint32_t kAimRateBase = 0x681BA8;
-constexpr uint32_t kBoostScale = 0x413650;
-constexpr uint32_t kBoostScaleFine = 0x3E4248;
+constexpr hle::Va kAimRateMost = SYM(AimRateMost);
+constexpr hle::Va kAimRateBase = SYM(AimRateBase);
+constexpr hle::Va kBoostScale = SYM(BoostScale);
+constexpr hle::Va kBoostScaleFine = SYM(BoostScaleFine);
 // swioPad's dead zones from its pad file, a stick reads as centred inside: the left stick, the right
-constexpr uint32_t kDeadZoneLeft = 0x4164E0;
-constexpr uint32_t kDeadZoneRight = 0x4164E4;
+constexpr hle::Va kDeadZoneLeft = SYM(DeadZoneLeft);
+constexpr hle::Va kDeadZoneRight = SYM(DeadZoneRight);
 // swioPad: +4 the console port it reads
 constexpr uint32_t kPadPort = 0x4;
 
@@ -84,15 +84,15 @@ constexpr uint32_t kOperandValue = 1;
 constexpr uint32_t kOperandNode = 2;
 constexpr uint32_t kValueFloat = 0x8;
 // expression nodes: the clamp (x, low, high), the per tick cache and its value; their vtables, operands within 0x20
-constexpr uint32_t kClampNode = 0x405578;
+constexpr hle::Va kClampNode = SYM(ClampNode);
 constexpr uint32_t kClampX = 0xC;
 constexpr uint32_t kClampLow = 0x14;
 constexpr uint32_t kClampHigh = 0x1C;
-constexpr uint32_t kCacheNode = 0x403A98;
+constexpr hle::Va kCacheNode = SYM(CacheNode);
 constexpr uint32_t kCacheValue = 0x1C;
 constexpr uint32_t kNodeSize = 0x20;
-constexpr uint32_t kFirstVtable = 0x3C0000;
-constexpr uint32_t kLastVtable = 0x420000;
+constexpr hle::Va kFirstVtable = SYM(FirstVtable);
+constexpr hle::Va kLastVtable = SYM(LastVtable);
 
 constexpr float kRadiansPerCount = 0.0015f;
 constexpr float kRadiansPerDegree = 3.14159265f / 180.0f;

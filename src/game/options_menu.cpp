@@ -22,10 +22,10 @@ namespace {
 constexpr uint32_t kPageName = 0x1C;
 constexpr uint32_t kPageLines = 0x448;
 constexpr uint32_t kLoaded = 0x34;
-constexpr uint32_t kReadLine = 0x1E990;
+constexpr hle::Va kReadLine = SYM(PageScriptLine);
 constexpr size_t kMaxLine = 255;
 // the page manager picks a page's kind by its name: ours are made as this menu page is, then read as ours
-constexpr uint32_t kMenuKindName = 0x3D2080;  // "gameoptions"
+constexpr hle::Va kMenuKindName = SYM(MenuKindName);  // "gameoptions"
 // the Options pages and their own buttons, ours after those; the buttons' rows, closer when they pass the last
 struct OptionsPage {
     const char* name;

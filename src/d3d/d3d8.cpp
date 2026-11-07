@@ -1451,10 +1451,10 @@ constexpr size_t kModelClipW = 103;
 // to 4:3 in the middle of the screen, or against the side of the HUD element drawing (game/hud_widescreen.cpp). In
 // the front end only the draws hooked there narrow. Kept draws (the lock reticle, the book) and draws as wide as the
 // screen stay as they are.
-constexpr uint32_t kScreenWidth = 0x413C44;  // the game's screen size in pixels
-constexpr uint32_t kScreenHeight = 0x413C48;
+constexpr hle::Va kScreenWidth = SYM(ScreenWidth);  // the game's screen size in pixels
+constexpr hle::Va kScreenHeight = SYM(ScreenHeight);
 // state machine: the current state, its +4 name
-constexpr uint32_t kCurrentState = 0x6664AC;
+constexpr hle::Va kCurrentState = SYM(CurrentState);
 constexpr uint32_t kStateName = 0x4;
 constexpr float kFullWidth = 0.98f;          // a draw reaching this far to both sides is full screen
 

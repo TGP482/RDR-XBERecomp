@@ -8,8 +8,8 @@ using namespace kernel;
 
 namespace {
 
-constexpr uint32_t kTitlesMovie = 0x3D03EC;  // "titles"
-constexpr uint32_t kPlayerChoice = 0x3D03D4;  // "playerChoice", logo01X sets it to 1 once start is pressed
+constexpr hle::Va kTitlesMovie = SYM(TitlesMovie);  // "titles"
+constexpr hle::Va kPlayerChoice = SYM(PlayerChoice);  // "playerChoice", logo01X sets it to 1 once start is pressed
 
 bool g_title_hidden = false;
 

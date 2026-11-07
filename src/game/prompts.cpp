@@ -35,7 +35,7 @@ constexpr uint32_t kRight = 4;
 bool g_measuring = false;  // our own measures see the game's text
 // a Flash text field's draw takes the text ActionScript set (copied into its buffer, thiscall(chunks, buffer, size)
 // ret 8, 0 when none), else its variable's or its own (in ebp); the copy's return in that draw
-constexpr uint32_t kFlashTextCopyReturn = 0x1AE7A8;
+constexpr hle::Va kFlashTextCopyReturn = SYM(FlashTextCopyReturn);
 constexpr uint32_t kFlashTextBuffer = 0x100;
 
 std::u16string ReadText(uint32_t va) {
