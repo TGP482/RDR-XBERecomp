@@ -1,7 +1,8 @@
 // Widescreen HUD: the game's 4:3 2D keeps its shape in the middle of the screen (d3d/d3d8.cpp), and each HUD element
 // goes to the side of the screen it sat on last frame, so the HUD keeps to the screen's edges. In the front end only the
-// button prompts, the Flash movies (title, shop, upgrades) and the pages on a 4:3 picture (options) narrow, in the
-// middle; the legal screen's and those pages' pictures narrow over black anywhere. Full screen movies follow FMV SCALE.
+// button prompts, the warning popups, the Flash movies (title, shop, upgrades) and the pages on a 4:3 picture (options)
+// narrow, in the middle; the legal screen's and those pages' pictures narrow over black anywhere. Full screen movies
+// follow FMV SCALE.
 #include <bit>
 #include <cstring>
 
@@ -18,6 +19,7 @@ using namespace kernel;
 namespace {
 
 constexpr uint32_t kFrontendButtonsVtable = 0x3D3500;  // swuiPageFrontendButtons, the button prompts
+constexpr uint32_t kWarningFrontendVtable = 0x3D1C40;  // the front end's warning popups (new game over a save)
 // a swui page's widgets and their count; the IPU background image's vtable and texture
 constexpr uint32_t kPageWidgets = 0x40;
 constexpr uint32_t kPageWidgetCount = 0x298;
@@ -202,7 +204,8 @@ static bool OnPicture(uint32_t page) {
 // a swui page's widgets, thiscall(page)
 X86_EXTERN_FUNC(__imp__sub_00019CC0);
 X86_FUNC(sub_00019CC0) {
-    bool narrow = R32(ctx.ecx) == kFrontendButtonsVtable || OnPicture(ctx.ecx);
+    uint32_t vtable = R32(ctx.ecx);
+    bool narrow = vtable == kFrontendButtonsVtable || vtable == kWarningFrontendVtable || OnPicture(ctx.ecx);
     if (narrow) BeginMiddle();
     __imp__sub_00019CC0(ctx, base);
     if (narrow) EndMiddle();
