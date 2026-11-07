@@ -1,13 +1,14 @@
 // The menus' cursor focuses the option under it as the D-pad would: buttons, combos and sliders, each by its row, and
-// in the Flash menus (the save popup's Yes and No, the pre-level Start, Weapon Selection and Shop) through the
-// selection their own script steps with Up and Down. The front end's book pages lie on a 3D book: the row comes from
-// where the renderer saw the cursor on the book's page texture.
+// in the Flash menus (the save popup's Yes and No, the pre-level Start, Weapon Selection and Shop, the level's end
+// Continue, Replay and Quit) through the selection their own script steps with Up and Down. The front end's book
+// pages lie on a 3D book: the row comes from where the renderer saw the cursor on the book's page texture.
 // Only a move acts, so a page opens on its own selection and the keys keep theirs; a click then presses A.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstring>
 #include <initializer_list>
+#include <limits>
 #include <vector>
 
 #include "core/input.h"
@@ -319,6 +320,54 @@ void UpdateLevelMenuHover(X86Context& ctx, uint32_t movie) {
     CallGuest(ctx, kSetGlobal, {selection, uint32_t(hovered)});
 }
 
+// The level's end menu: rewardMenu's slots, Continue, Replay and Quit down the page (no Quit in noQuit), curMenSel
+// their row. Only that movie sets secondMenuOn, the confirmation after it.
+constexpr const char* kRewardSlots[] = {"slot0", "slot1", "slot2"};
+constexpr float kSlotTextMiddle = 10.5f;  // a slot's text middle below its origin, in its own units
+
+void UpdateRewardMenuHover(X86Context& ctx, uint32_t movie) {
+    static const uint32_t shown = GuestString("menuOn");
+    static const uint32_t second = GuestString("secondMenuOn");
+    static const uint32_t third = GuestString("thirdMenuOn");
+    static const uint32_t no_quit = GuestString("noQuit");
+    static const uint32_t selection = GuestString("curMenSel");
+    float x = 0.0f;
+    float y = 0.0f;
+    int on = 0;
+    int confirming = 0;
+    int confirming_again = 0;
+    if (!game::InLoadShow() || !G<uint8_t>(movie + kMovieLoaded) || !GetGlobal(ctx, movie, second, confirming)) return;
+    GetGlobal(ctx, movie, third, confirming_again);
+    if (!GetGlobal(ctx, movie, shown, on) || !on || confirming || confirming_again) return;
+    if (!input::MenuCursorAt(x, y) || !UpdateSeen(movie, x, y)) return;
+    uint32_t player = R32(movie + kMoviePlayer);
+    uint32_t def = player ? R32(player + kPlayerMovie) : 0;
+    uint32_t root = player ? R32(player + kPlayerRoot) : 0;
+    uint32_t holder = root ? ParentOfChild(root, "rewardMenu") : 0;
+    uint32_t menu = holder ? ChildNamed(holder, "rewardMenu") : 0;
+    int current = 0;
+    int quit_gone = 0;
+    if (!def || !menu || !GetGlobal(ctx, movie, selection, current)) return;
+    GetGlobal(ctx, movie, no_quit, quit_gone);
+    int rows = quit_gone ? 2 : 3;
+    float cursor = y * G<float>(def + kMovieHeight);
+    int hovered = 0;
+    float nearest = std::numeric_limits<float>::max();
+    for (int row = 0; row < rows; row++) {
+        uint32_t slot = ChildNamed(menu, kRewardSlots[row]);
+        if (!slot) return;
+        float middle = G<float>(slot + kWorldY) + kSlotTextMiddle * G<float>(slot + kWorldScaleY);
+        float distance = std::abs(cursor - middle);
+        if (distance < nearest) {
+            nearest = distance;
+            hovered = row;
+        }
+    }
+    if (hovered == current) return;
+    ctx.ecx = movie;
+    CallGuest(ctx, kSetGlobal, {selection, uint32_t(hovered)});
+}
+
 }  // namespace
 
 // a page's update, thiscall(page, ?) ret 4, before its input
@@ -357,6 +406,7 @@ X86_EXTERN_FUNC(__imp__sub_00018870);
 X86_FUNC(sub_00018870) {
     uint32_t movie = ctx.ecx;
     UpdateLevelMenuHover(ctx, movie);
+    UpdateRewardMenuHover(ctx, movie);
     ctx.ecx = movie;
     __imp__sub_00018870(ctx, base);
 }
