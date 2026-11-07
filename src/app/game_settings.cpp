@@ -16,6 +16,7 @@
 
 #include "app/app.h"
 #include "audio/audio.h"
+#include "xdk/hle.h"
 
 namespace app {
 
@@ -116,7 +117,7 @@ uint32_t ResolveLanguage(uint32_t setting) { return setting ? setting : SystemLa
 
 uint32_t BootLanguage() {
     static const uint32_t language = ResolveLanguage(Rdr().language);
-    return language;
+    return HAS(LanguageSetting) ? language : 1;  // English, a release without the setting has one language
 }
 
 std::atomic<float>& FrameRate() {

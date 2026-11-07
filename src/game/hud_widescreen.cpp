@@ -13,6 +13,7 @@
 #include "d3d/inline_shift.h"
 #include "game/boot.h"
 #include "game/load_show.h"
+#include "game/prompts.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -225,11 +226,14 @@ static bool OnPicture(uint32_t page) {
 X86_EXTERN_FUNC(__imp__sub_PageWidgets);
 X86_FUNC(sub_PageWidgets) {
     uint32_t vtable = R32(ctx.ecx);
+    bool buttons = vtable == kFrontendButtonsVtable;
     bool popup = vtable == kWarningFrontendVtable || vtable == kDifficultyVtable;
-    bool narrow = vtable == kFrontendButtonsVtable || popup || OnPicture(ctx.ecx);
+    bool narrow = buttons || popup || OnPicture(ctx.ecx);
+    if (buttons) game::BeginPromptBar(ctx.ecx);
     if (narrow) BeginMiddle();
     __imp__sub_PageWidgets(ctx, base);
     if (narrow) EndMiddle();
+    if (buttons) game::EndPromptBar();
 }
 
 // a page's IPU background, fastcall(image): a whole screen 4:3 picture (options_bg_10k), narrowed over black

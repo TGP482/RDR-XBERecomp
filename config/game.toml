@@ -328,6 +328,7 @@ GlyphColour                 = 0x684610
 GridColumns                 = 0x40E4FC
 HudShape                    = 0x416BBC
 ImageVtable                 = 0x3D0E18
+LanguageSetting             = 1  # 1: the release has the LANGUAGE setting
 LastVtable                  = 0x420000
 LevelTable                  = 0x663440
 LoadState                   = 0x666374

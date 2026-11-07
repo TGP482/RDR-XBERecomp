@@ -328,6 +328,7 @@ GlyphColour                 = 0x678970
 GridColumns                 = 0x40405C
 HudShape                    = 0x40C71C
 ImageVtable                 = 0x3C6AC0
+LanguageSetting             = 0
 LastVtable                  = 0x416000
 LevelTable                  = 0x6577A0
 LoadState                   = 0x65A6D4

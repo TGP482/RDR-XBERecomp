@@ -1,14 +1,19 @@
 // PC prompts: the game's button icons are characters of its fonts in the text, drawn by the font's draw. While the
 // keyboard and mouse are in use each one is drawn as its key instead, "Press (R) to reload.", in every language. An
-// icon drawn alone (the prompt bar's) grows to its left, so the text after it keeps its place. The Flash movies' text
-// fields ("Press START" on the title) get the same.
+// icon drawn alone grows to its left, so the text after it keeps its place; on a prompt bar's row of several keys the
+// row lays out again, each key starting where its icon did. The Flash movies' text fields ("Press START" on the title)
+// get the same.
 #include <algorithm>
+#include <cmath>
 #include <iterator>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "core/input.h"
 #include "game/font.h"
 #include "game/prompt_words.h"
+#include "game/prompts.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -37,6 +42,16 @@ bool g_measuring = false;  // our own measures see the game's text
 // ret 8, 0 when none), else its variable's or its own (in ebp); the copy's return in that draw
 constexpr hle::Va kFlashTextCopyReturn = SYM(FlashTextCopyReturn);
 constexpr uint32_t kFlashTextBuffer = 0x100;
+
+// a prompt bar's key: where the game drew its icon, and how much wider the key is
+struct BarKey {
+    float x;
+    float y;
+    float grow;
+};
+std::unordered_map<uint32_t, std::vector<BarKey>> g_bars;  // each bar's keys this frame
+std::vector<BarKey> g_last_bar;                            // the drawing bar's keys last frame
+std::vector<BarKey>* g_bar = nullptr;
 
 std::u16string ReadText(uint32_t va) {
     std::u16string s;
@@ -140,12 +155,41 @@ void WriteUtf8(uint32_t va, const std::u16string& s) {
     G<uint8_t>(va + uint32_t(n)) = 0;
 }
 
-// how far left the key starts so it ends where the icon did
-float LeftShift(X86Context& ctx, const DrawArgs& d, uint32_t keys) {
+// how far left a key grown by grow starts so it ends where the icon did
+float LeftShift(const DrawArgs& d, float grow) {
     uint32_t align = d.layout ? R32(d.layout) & (kCentred | kRight) : 0;
     if (align & kRight) return 0;
-    float grow = float(Width(ctx, d, keys) - Width(ctx, d, d.text));
     return align & kCentred ? grow / 2 : grow;
+}
+
+// On a bar's row of several keys a text moves right by how much the keys before it grew, the row's middle kept.
+// False on a row of one key. Rows match exactly: the text's shadow, 2 pixels down, is a row of its own.
+bool BarMove(float x, float y, float& move) {
+    int keys = 0;
+    float before = 0;
+    float total = 0;
+    for (const BarKey& k : g_last_bar) {
+        if (std::abs(k.y - y) > 0.5f) continue;
+        keys++;
+        total += k.grow;
+        if (k.x < x) before += k.grow;
+    }
+    move = before - total / 2;
+    return keys > 1;
+}
+
+// the draw's x: a key drawn alone ends where its icon did, on a bar's row of keys it starts there
+void PlaceText(X86Context& ctx, const DrawArgs& d, const std::u16string& text, uint32_t keys) {
+    bool icon = keys && text.size() == 1 && IsGlyph(text[0]);
+    if (!icon && !g_bar) return;
+    float grow = icon ? float(Width(ctx, d, keys) - Width(ctx, d, d.text)) : 0;
+    float& x = G<float>(ctx.esp + 4);
+    float y = G<float>(ctx.esp + 8);
+    if (icon && g_bar) g_bar->push_back({x, y, grow});
+    float move = 0;
+    if (g_bar && BarMove(x, y, move)) x += move + grow - LeftShift(d, grow);
+    else x -= LeftShift(d, grow);
+    ctx.ecx = d.font;
 }
 
 }  // namespace
@@ -156,20 +200,20 @@ X86_FUNC(sub_FontDraw) {
     DrawArgs d{ctx.ecx, R32(ctx.esp + 0xC), R32(ctx.esp + 0x10), R32(ctx.esp + 0x14), R32(ctx.esp + 0x18)};
     std::u16string text = d.text && !g_measuring && input::KeyboardActive() ? ReadText(d.text) : std::u16string();
     std::u16string keys;
-    if (!WithKeys(text, keys)) {
-        __imp__sub_FontDraw(ctx, base);
-        return;
-    }
-    uint32_t replaced = WriteText(keys);
+    uint32_t replaced = WithKeys(text, keys) ? WriteText(keys) : 0;
     bool measure = G<uint8_t>(ctx.esp + 0x1C) != 0;
-    if (!measure && text.size() == 1 && IsGlyph(text[0])) {
-        float shift = LeftShift(ctx, d, replaced);
-        G<float>(ctx.esp + 4) -= shift;
-        ctx.ecx = d.font;
-    }
-    W32(ctx.esp + 0xC, replaced);
+    if (!measure && !text.empty()) PlaceText(ctx, d, text, replaced);
+    if (replaced) W32(ctx.esp + 0xC, replaced);
     __imp__sub_FontDraw(ctx, base);
 }
+
+void game::BeginPromptBar(uint32_t page) {
+    g_bar = &g_bars[page];
+    g_last_bar.clear();
+    g_last_bar.swap(*g_bar);
+}
+
+void game::EndPromptBar() { g_bar = nullptr; }
 
 // a Flash text field's copy of its ActionScript text; in a text field's draw it hands over the text shown, as keys
 X86_EXTERN_FUNC(__imp__sub_FlashTextCopy);

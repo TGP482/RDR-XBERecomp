@@ -225,7 +225,9 @@ const std::vector<Row>& ControllerRows() {
 std::vector<Row> PageRows(int page) {
     if (page == kKeyboardPage) return KeyboardRows();
     if (page == kControllerPage) return ControllerRows();
-    return {std::begin(kSettingsRows), std::end(kSettingsRows)};
+    std::vector<Row> rows(std::begin(kSettingsRows), std::end(kSettingsRows));
+    if (!HAS(LanguageSetting)) std::erase_if(rows, [](const Row& r) { return r.id == RowId::Language; });
+    return rows;
 }
 
 // in the game's language, as ImGui's UTF-8; caps for the panel's capitals
