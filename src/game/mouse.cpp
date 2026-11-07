@@ -12,7 +12,6 @@
 // nothing.
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 #include <string_view>
 #include <vector>
 
@@ -176,17 +175,11 @@ void DropSoftLock(X86Context& ctx, uint32_t player) {
     ctx.ecx = player;
 }
 
-float ReadFloat(uint32_t va) { return GF(va); }
-
-void WriteFloat(uint32_t va, float f) { std::memcpy(HostPtr(va), &f, 4); }
-
-void AddFloat(uint32_t va, float f) { WriteFloat(va, ReadFloat(va) + f); }
-
 // radians a frame the aim turns for a full stick
 float AimRate(uint32_t player) {
-    float most = ReadFloat(kAimRateMost);
-    float base = ReadFloat(kAimRateBase);
-    float boost = ReadFloat(player + kLookBoost) * ReadFloat(kBoostScale) * ReadFloat(kBoostScaleFine);
+    float most = GF(kAimRateMost);
+    float base = GF(kAimRateBase);
+    float boost = GF(player + kLookBoost) * GF(kBoostScale) * GF(kBoostScaleFine);
     return (most - base) * boost + base;
 }
 
@@ -205,10 +198,10 @@ void TurnHeading(uint32_t heading, float angle) {
     float c = std::cos(angle);
     float s = std::sin(angle);
     for (uint32_t row = heading; row < heading + 36; row += 12) {
-        float x = ReadFloat(row);
-        float z = ReadFloat(row + 8);
-        WriteFloat(row, x * c + z * s);
-        WriteFloat(row + 8, z * c - x * s);
+        float x = GF(row);
+        float z = GF(row + 8);
+        G<float>(row) = x * c + z * s;
+        G<float>(row + 8) = z * c - x * s;
     }
 }
 
@@ -216,8 +209,8 @@ void TurnHeading(uint32_t heading, float angle) {
 // it: the yaw turns the heading when there is one, else the aim
 void AddAimTurn(uint32_t player, uint32_t stick, Turn t) {
     const app::RdrSettings& s = app::Rdr();
-    float x = ReadFloat(stick) * s.pad_aim_horizontal_sensitivity;
-    float y = ReadFloat(stick + 4) * s.pad_aim_vertical_sensitivity;
+    float x = GF(stick) * s.pad_aim_horizontal_sensitivity;
+    float y = GF(stick + 4) * s.pad_aim_vertical_sensitivity;
     float rate = AimRate(player);
     if (rate > kLeastRate) {
         uint32_t heading = TurnableHeading(player);
@@ -225,8 +218,8 @@ void AddAimTurn(uint32_t player, uint32_t stick, Turn t) {
         else x += t.x / rate;
         y += t.y / rate;
     }
-    WriteFloat(stick, x);
-    WriteFloat(stick + 4, y);
+    G<float>(stick) = x;
+    G<float>(stick + 4) = y;
 }
 
 // Each pad update the setting goes into the game's dead zones, the setting's 0 puts the game's own back. A value there
@@ -239,11 +232,11 @@ DeadZone g_left_zone;
 DeadZone g_right_zone;
 
 void UpdateDeadZone(uint32_t va, DeadZone& zone) {
-    float now = ReadFloat(va);
+    float now = GF(va);
     if (now != zone.written) zone.game = now;
     float setting = app::Rdr().pad_dead_zone;
     zone.written = setting > 0.0f ? setting : zone.game;
-    WriteFloat(va, zone.written);
+    G<float>(va) = zone.written;
 }
 
 void UpdateDeadZones() {
@@ -328,11 +321,11 @@ bool OperandValue(uint32_t node, uint32_t at, float& value) {
     uint32_t operand = R32(node + at);
     uint32_t kind = R32(node + at + 4);
     if (kind == kOperandValue) {
-        value = ReadFloat(operand + kValueFloat);
+        value = GF(operand + kValueFloat);
         return true;
     }
     if (kind != kOperandNode || !ExpressionNode(operand) || R32(operand) != kCacheNode) return false;
-    value = ReadFloat(R32(operand + kCacheValue) + kValueFloat);
+    value = GF(R32(operand + kCacheValue) + kValueFloat);
     return true;
 }
 
@@ -345,7 +338,7 @@ bool TiltLocked() {
 
 void ApplyCameraTilt() {
     if (!g_camera.following) return;
-    if (!TiltLocked()) AddFloat(CameraInput(g_camera.machine, kInputCameraTilt), -g_camera.turn.y);
+    if (!TiltLocked()) G<float>(CameraInput(g_camera.machine, kInputCameraTilt)) -= g_camera.turn.y;
     g_camera.turn.y = 0.0f;
 }
 
@@ -417,8 +410,8 @@ X86_FUNC(sub_DuelAim) {
     if (MouseTurns(player)) {
         input::SetAiming(true);
         Turn t = TakeTurn();
-        AddFloat(player + kLookYaw, t.x);
-        AddFloat(player + kLookPitch, -t.y);
+        G<float>(player + kLookYaw) += t.x;
+        G<float>(player + kLookPitch) -= t.y;
     }
     __imp__sub_DuelAim(ctx, base);
 }
@@ -432,7 +425,7 @@ X86_FUNC(sub_DuelStick) {
     bool drawing = R32(ctx.ecx + kDuelState) < kDuelAiming;
     if (player && stick == player + kDuelStick && drawing && g_turn.y != 0.0f) {
         float flick = std::clamp(g_turn.y / kDrawFlick, -1.0f, 1.0f);
-        if (std::abs(flick) > std::abs(ReadFloat(stick + kStickY))) WriteFloat(stick + kStickY, flick);
+        if (std::abs(flick) > std::abs(GF(stick + kStickY))) G<float>(stick + kStickY) = flick;
         g_turn.y = 0.0f;
     }
     __imp__sub_DuelStick(ctx, base);
@@ -480,13 +473,13 @@ X86_FUNC(sub_SetTiltUpdate) {
 // the follow camera's pivot (P_StrafePivot_SetRadius_AngleLimit 0x2A82D0) has just read its bearing, the
 // PlatformBearing DOF, onto the x87 stack; it adds the stick's swing next, then its angle limit
 void FollowCameraBearing(X86Context& ctx, uint8_t*) {
-    if (g_camera.ticking) ctx.st[ctx.top & 7] -= TakeCameraYaw();
+    if (g_camera.ticking) X87_ST(0) -= TakeCameraYaw();
 }
 
 // the wagon camera's pivot (P_WagonStrafePivot_SetRadius), thiscall(action, context) ret 4
 X86_EXTERN_FUNC(__imp__sub_WagonCameraPivot);
 X86_FUNC(sub_WagonCameraPivot) {
-    if (g_camera.ticking) AddFloat(ctx.ecx + kWagonSwing, -TakeCameraYaw());
+    if (g_camera.ticking) G<float>(ctx.ecx + kWagonSwing) -= TakeCameraYaw();
     __imp__sub_WagonCameraPivot(ctx, base);
 }
 
@@ -496,8 +489,8 @@ X86_FUNC(sub_GatlingCamera) {
     if (g_camera.ticking) {
         Turn t = g_camera.turn;
         g_camera.turn = {};
-        AddFloat(ctx.ecx + kGatlingYaw, -t.x);
-        AddFloat(ctx.ecx + kGatlingPitch, -t.y);
+        G<float>(ctx.ecx + kGatlingYaw) -= t.x;
+        G<float>(ctx.ecx + kGatlingPitch) -= t.y;
     }
     __imp__sub_GatlingCamera(ctx, base);
 }
