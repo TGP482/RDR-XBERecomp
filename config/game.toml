@@ -345,3 +345,8 @@ on_true = 0x679F3
 [[hook]]
 at = 0x208C90
 call = "CoachPhysicsSteps"
+
+# the bridge's cannon counts: the second team's starts, so each team keeps to its own side (src/game/hud_widescreen.cpp)
+[[hook]]
+at = 0x1D5528
+call = "CannonCountSecondTeam"

@@ -140,7 +140,6 @@ void EndMiddle() {
         EndElement(element);           \
     }
 
-HUD_ELEMENT(sub_001D5000)
 HUD_ELEMENT(sub_001D60E0)
 HUD_ELEMENT(sub_001D75A0)
 HUD_ELEMENT(sub_001D8D60)
@@ -150,6 +149,25 @@ HUD_ELEMENT(sub_001DEF00)
 HUD_ELEMENT(sub_001E42D0)
 HUD_ELEMENT(sub_001E54D0)
 HUD_ELEMENT(sub_001E7FB0)
+
+// the bridge's cannon counts, thiscall(hud, ...): each team's icon and count goes to its own side
+static Element g_cannons[2];
+static Element* g_cannon = nullptr;
+
+X86_EXTERN_FUNC(__imp__sub_001D5000);
+X86_FUNC(sub_001D5000) {
+    g_cannon = &g_cannons[0];
+    BeginElement(*g_cannon);
+    __imp__sub_001D5000(ctx, base);
+    EndElement(*g_cannon);
+}
+
+// the second team's count is about to draw
+void CannonCountSecondTeam(X86Context&, uint8_t*) {
+    EndElement(*g_cannon);
+    g_cannon = &g_cannons[1];
+    BeginElement(*g_cannon);
+}
 
 // a health bar and its name, cdecl(enemy, place, ...), drawn by sub_001D9550: the enemies' (bosses') and the allies'
 // each go to their own side
