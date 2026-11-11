@@ -162,6 +162,10 @@ constexpr Entry kEntries[] = {
     {"BUTTONS", {u"Boutons", u"Tasten", u"Pulsanti", u"Botones"}},
     {"PRESS A BUTTON", {u"Appuyez sur un bouton", u"Taste drücken", u"Premi un pulsante", u"Pulsa un botón"}},
 
+    // the main menu's Exit
+    {"EXIT", {u"Quitter", u"Beenden", u"Esci", u"Salir"}},
+    {"ARE YOU SURE YOU WANT TO QUIT?", {u"Voulez-vous vraiment quitter ?", u"Möchtest du das Spiel wirklich beenden?", u"Vuoi davvero uscire dal gioco?", u"¿Seguro que quieres salir del juego?"}},
+
     // the panel's own
     {"SETTINGS", {u"Paramètres", u"Einstellungen", u"Impostazioni", u"Configuración"}},
     {"DEFAULTS", {u"Par défaut", u"Standard", u"Predefiniti", u"Por defecto"}},

@@ -12,6 +12,7 @@
 
 #include "core/input.h"
 #include "d3d/pick.h"
+#include "game/exit_menu.h"
 #include "game/load_show.h"
 #include "game/swui.h"
 #include "xdk/hle.h"
@@ -28,9 +29,7 @@ constexpr float kSameRow = 1.0f;  // tops this close share a row, side by side
 // page: active
 constexpr uint32_t kActive = 0x3D;
 constexpr uint32_t kMaxWidgets = (kPageWidgetCount - kPageWidgets) / 4;
-// widget: place and the offset drawn from it, focusable when both are set
-constexpr uint32_t kLeft = 0x4C;
-constexpr uint32_t kTop = 0x50;
+// widget: the offset drawn from its place, focusable when selectable and shown
 constexpr uint32_t kOffsetX = 0x58;
 constexpr uint32_t kOffsetY = 0x5C;
 constexpr uint32_t kSelectable = 0xD8;
@@ -374,6 +373,7 @@ X86_FUNC(sub_PageUpdate) {
     if (G<uint8_t>(page + kActive)) UpdateHover(ctx, page);
     ctx.ecx = page;
     __imp__sub_PageUpdate(ctx, base);
+    game::UpdateExitButton(page);
 }
 
 // the book's page into its texture, thiscall(book, texture, page) ret 8, before the book is drawn with it

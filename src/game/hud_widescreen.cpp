@@ -12,6 +12,7 @@
 #include "core/input.h"
 #include "d3d/inline_shift.h"
 #include "game/boot.h"
+#include "game/exit_menu.h"
 #include "game/load_show.h"
 #include "game/prompts.h"
 #include "game/swui.h"
@@ -260,6 +261,7 @@ static void UpdateMenuBars(uint32_t page) {
 X86_EXTERN_FUNC(__imp__sub_PageWidgets);
 X86_FUNC(sub_PageWidgets) {
     UpdateMenuBars(ctx.ecx);
+    game::UpdateExitQuestion(ctx.ecx);
     uint32_t vtable = R32(ctx.ecx);
     bool buttons = vtable == kFrontendButtonsVtable;
     bool popup = vtable == kWarningFrontendVtable || vtable == kDifficultyVtable;

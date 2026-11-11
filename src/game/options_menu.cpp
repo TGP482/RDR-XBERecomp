@@ -71,6 +71,10 @@ Prompts g_prompts;  // the page being read
 std::vector<uint32_t> g_arrowless;  // the key bind rows' combos, drawn without arrows
 size_t g_scroll = 0;                // the section row the first combo shows
 
+// the main menu's last button, Bounty Hunter's line: Exit follows it, the game ignoring its callback
+constexpr char kBountyButton[] = ":story_bhunter:";
+constexpr char kBountyCall[] = ":BHUNTER>";
+
 constexpr const char* kAcronyms[] = {"FPS", "HDR", "FMV", "MSAA", "SMAA", "SSAO", "GTAO", "PNG", "DDS"};
 
 bool Acronym(const std::string& text, size_t at) {
@@ -349,6 +353,19 @@ std::string WithPrompt(const std::string& line) {
     return "<TEXT:" + std::to_string(x + kBackShift) + line.substr(comma);
 }
 
+// Exit, as Bounty Hunter's line with its own label and callback (game/exit_menu.cpp)
+void AddExitButton(X86Context& ctx, uint32_t page, std::string line) {
+    size_t call = line.find(kBountyCall);
+    if (call == std::string::npos) return;
+    line.replace(call, std::strlen(kBountyCall), ":EXIT>");
+    line.replace(line.find(kBountyButton), std::strlen(kBountyButton), ":" + InScript(Label("EXIT")) + ":");
+    uint32_t result = ctx.eax;
+    g_adding = true;
+    ReadLine(ctx, page, line);
+    g_adding = false;
+    ctx.eax = result;
+}
+
 // "<BUTTON:x,y,..." with another y
 std::string WithRow(const std::string& line, int y) {
     size_t first = line.find(',');
@@ -381,6 +398,7 @@ X86_FUNC(sub_PageScriptLine) {
         W32(ctx.esp + 8, uint32_t(std::min(moved.size(), kMaxLine)));
     }
     __imp__sub_PageScriptLine(ctx, base);
+    if (line.find(kBountyButton) != std::string::npos) AddExitButton(ctx, page, line);
     if (!button || g_buttons != own) return;
     uint32_t result = ctx.eax;
     g_adding = true;

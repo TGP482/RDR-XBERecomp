@@ -11,9 +11,11 @@ constexpr uint32_t kPageWidgets = 0x40;
 constexpr uint32_t kPageWidgetCount = 0x298;
 constexpr uint32_t kPagePressed = 0x308;
 constexpr uint32_t kPageFocused = 0x31C;
-// widget: its name, its kind, shown; its focus(quiet) and unfocus slots
+// widget: its name, its kind, its place, shown; its focus(quiet) and unfocus slots
 constexpr uint32_t kWidgetName = 0x28;
 constexpr uint32_t kWidgetKind = 0x48;
+constexpr uint32_t kLeft = 0x4C;
+constexpr uint32_t kTop = 0x50;
 constexpr uint32_t kWidgetShown = 0xE6;
 constexpr uint32_t kFocus = 0x10;
 constexpr uint32_t kUnfocus = 0x14;
