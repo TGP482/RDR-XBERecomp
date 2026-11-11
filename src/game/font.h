@@ -4,6 +4,7 @@
 namespace game_font {
 
 constexpr hle::Va kLineHeight = SYM(FontLineHeight);  // font: its line's height in pixels
+constexpr uint32_t kSmooth = 0x220;  // font: linearly filtered, else point sampled pixel for pixel
 // text layout: its defaults, fastcall(layout); its alignment bits, the right edge right aligned text ends on
 // (relative to x) and its colour
 constexpr hle::Va kInitLayout = SYM(InitLayout);

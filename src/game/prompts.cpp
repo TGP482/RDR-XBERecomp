@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "core/input.h"
+#include "d3d/linear_text.h"
 #include "game/font.h"
 #include "game/prompt_words.h"
 #include "game/prompts.h"
@@ -204,7 +205,11 @@ X86_FUNC(sub_FontDraw) {
     bool measure = G<uint8_t>(ctx.esp + 0x1C) != 0;
     if (!measure && !text.empty()) PlaceText(ctx, d, text, replaced);
     if (replaced) W32(ctx.esp + 0xC, replaced);
+    // unbatched, a pixel font's text sets point sampling and draws at once (sub_00054A30)
+    bool pixel = !G<uint8_t>(d.font + game_font::kSmooth) && !R32(ctx.esp + 0x20);
+    xdk::SetLinearText(pixel);
     __imp__sub_FontDraw(ctx, base);
+    xdk::SetLinearText(false);
 }
 
 void game::BeginPromptBar(uint32_t page) {

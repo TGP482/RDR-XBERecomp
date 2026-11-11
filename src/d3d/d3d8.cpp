@@ -26,6 +26,7 @@
 #include "core/diag.h"
 #include "d3d/dirty_marks.h"
 #include "d3d/inline_shift.h"
+#include "d3d/linear_text.h"
 #include "d3d/occlusion.h"
 #include "gpu/backend.h"
 #include "gpu/shaders.h"
@@ -240,11 +241,18 @@ uint32_t NewSurface(uint32_t w, uint32_t h, uint32_t fmt, uint32_t bpp) {
     return hdr;
 }
 
+bool g_linear_text = false;  // xdk::SetLinearText
+constexpr uint32_t kTexfLinear = 2;
+
 void SyncDeferred() {
     // deferred states live in the title's memory, the inline SetRenderState and SetTextureStageState write them
     for (uint32_t i = gpu::kRsDeferredFirst; i < gpu::kRsComplexFirst; i++) g_state.rs[i] = R32(kRenderState + i * 4);
     for (int s = 0; s < 4; s++)
         for (uint32_t i = 0; i < gpu::kTssBumpEnvMat00; i++) g_state.tss[s][i] = R32(kTextureState + (s * kStageStates + i) * 4);
+    if (!g_linear_text) return;
+    auto& t = g_state.tss[0];
+    t[gpu::kTssMagFilter] = std::max(t[gpu::kTssMagFilter], kTexfLinear);
+    t[gpu::kTssMinFilter] = std::max(t[gpu::kTssMinFilter], kTexfLinear);
 }
 
 float ZScale(const gpu::Surface& zs) {
@@ -1742,6 +1750,8 @@ static void RunCommands(uint32_t begin, uint32_t end) {
 }
 
 void xdk::BeginInlineSide(int side, xdk::Fit fit) { g_inline = {true, side, fit, {}}; }
+
+void xdk::SetLinearText(bool on) { g_linear_text = on; }
 
 xdk::ScreenSpan xdk::EndInlineSide() {
     xdk::ScreenSpan span = g_inline.span;
