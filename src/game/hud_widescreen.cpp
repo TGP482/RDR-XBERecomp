@@ -1,5 +1,6 @@
 // Widescreen HUD: the game's 4:3 2D keeps its shape in the middle of the screen (d3d/d3d8.cpp), and each HUD element
-// goes to the side of the screen it sat on last frame, so the HUD keeps to the screen's edges. In the front end only the
+// goes to the side of the screen it sat on last frame, so the HUD keeps to the screen's edges; in split screen to the
+// side of its view, keeping its place to the opening of the view's frame as on 4:3. In the front end only the
 // button prompts, the warning popups, the difficulty select, the profile page, the Flash movies (title, shop, upgrades)
 // and the pages on a 4:3 picture (options) narrow, in the middle; the legal screen's and those pages' pictures narrow
 // over black anywhere. Full screen movies follow FMV SCALE.
@@ -13,6 +14,7 @@
 #include "d3d/inline_shift.h"
 #include "game/boot.h"
 #include "game/exit_menu.h"
+#include "game/hud_widescreen.h"
 #include "game/load_show.h"
 #include "game/prompts.h"
 #include "game/swui.h"
@@ -30,7 +32,7 @@ constexpr hle::Va kDifficultyVtable = SYM(DifficultyVtable);       // difficulty
 // the IPU background image's vtable and texture
 constexpr hle::Va kImageVtable = SYM(ImageVtable);
 constexpr uint32_t kImageTexture = 0x114;
-constexpr float kSide = 1.0f / 3;  // clip space: an element centred past this goes to its side
+constexpr float kSide = 1.0f / 3;  // a view's clip space: an element centred past this goes to its side
 constexpr float kFullWidth = 0.98f;
 
 struct Element {
@@ -43,21 +45,6 @@ int SideAt(float middle) {
     if (middle < -kSide) return -1;
     if (middle > kSide) return 1;
     return 0;
-}
-
-int SideOf(const xdk::ScreenSpan& span) {
-    if (span.x0 <= -kFullWidth && span.x1 >= kFullWidth) return 0;
-    return SideAt((span.x0 + span.x1) / 2);
-}
-
-void BeginElement(const Element& e) {
-    if (g_depth++ == 0) xdk::BeginInlineSide(e.side);
-}
-
-void EndElement(Element& e) {
-    if (--g_depth > 0) return;
-    xdk::ScreenSpan span = xdk::EndInlineSide();
-    if (span.drawn) e.side = SideOf(span);
 }
 
 // movie: +0 its Bink (+0 width, +4 height), +4 its texture; the movie draw's return, in sub_00070F60, and that
@@ -127,6 +114,94 @@ void DrawMovieFilled(X86Context& ctx) {
     xdk::EndInlineKeep();
 }
 
+// the view drawing (sub_ViewportProjection): +0 its device viewport, whose +0x164 holds x, y, width and height in the
+// screen's pixels (sub_00186160)
+uint32_t g_viewport = 0;
+constexpr uint32_t kViewportDevice = 0x0;
+constexpr uint32_t kDeviceRect = 0x164;
+
+// The split screen frames (olay_xbox_2pA to 4pD in swat.dat, sub_001DD190) draw over the views as placed, stretched.
+// Their openings: the innermost x of each one's torn sides in console pixels, and whether it frames a top view.
+struct Opening {
+    bool top;
+    float left;
+    float right;
+};
+constexpr Opening kOpenings[] = {
+    {true, 52.25f, 584.66f},    // 2pA
+    {false, 55.34f, 587.75f},   // 2pB
+    {true, 53.6f, 305.6f},      // 3pA, 4pA
+    {true, 334.37f, 585.81f},   // 3pB, 4pB
+    {false, 197.6f, 449.6f},    // 3pC
+    {false, 53.6f, 305.6f},     // 4pC
+    {false, 334.37f, 585.81f},  // 4pD
+};
+constexpr float kConsoleHalfWidth = 320.0f;
+
+// clip x of the drawing view's edges and of its frame's opening; the whole screen out of split screen
+struct ViewFrame {
+    float left = -1;
+    float right = 1;
+    float open_left = -1;
+    float open_right = 1;
+};
+
+// split screen views are at most half the screen high; a view's frame is the widest opening of its half of the
+// screen that fits inside it
+ViewFrame DrawingFrame() {
+    ViewFrame frame;
+    uint32_t device = g_viewport ? R32(g_viewport + kViewportDevice) : 0;
+    if (!device) return frame;
+    uint32_t rect = device + kDeviceRect;
+    uint32_t height = R32(kScreenHeight);
+    uint32_t view_height = R32(rect + 12);
+    if (!R32(rect + 8) || !view_height || view_height * 2 > height) return frame;
+    float half_width = float(R32(kScreenWidth)) / 2;
+    frame.left = float(R32(rect)) / half_width - 1;
+    frame.right = float(R32(rect) + R32(rect + 8)) / half_width - 1;
+    frame.open_left = frame.left;
+    frame.open_right = frame.right;
+    bool top = R32(rect + 4) * 2 < height;
+    float widest = 0;
+    for (const Opening& o : kOpenings) {
+        float left = o.left / kConsoleHalfWidth - 1;
+        float right = o.right / kConsoleHalfWidth - 1;
+        bool fits = o.top == top && left >= frame.left && right <= frame.right;
+        if (!fits || right - left <= widest) continue;
+        widest = right - left;
+        frame.open_left = left;
+        frame.open_right = right;
+    }
+    return frame;
+}
+
+// the side of the view an element drew on
+int SideOf(const xdk::ScreenSpan& span, const ViewFrame& view) {
+    float middle = (view.left + view.right) / 2;
+    float half = (view.right - view.left) / 2;
+    float x0 = (span.x0 - middle) / half;
+    float x1 = (span.x1 - middle) / half;
+    if (x0 <= -kFullWidth && x1 >= kFullWidth) return 0;
+    return SideAt((x0 + x1) / 2);
+}
+
+// the clip x an element keeps in place: its side's edge of the frame's opening, or the view's middle
+float Anchor(int side, const ViewFrame& view) {
+    if (side < 0) return view.open_left;
+    if (side > 0) return view.open_right;
+    return (view.left + view.right) / 2;
+}
+
+void BeginElement(const Element& e) {
+    if (g_depth++ == 0) xdk::BeginInlineSide(Anchor(e.side, DrawingFrame()));
+}
+
+void EndElement(Element& e) {
+    if (--g_depth > 0) return;
+    xdk::ScreenSpan span = xdk::EndInlineSide();
+    if (span.drawn) e.side = SideOf(span, DrawingFrame());
+}
+
 void BeginMiddle() {
     if (g_depth++ == 0) xdk::BeginInlineSide(0);
 }
@@ -136,6 +211,8 @@ void EndMiddle() {
 }
 
 }  // namespace
+
+void game::LatchHudView(uint32_t viewport) { g_viewport = viewport; }
 
 // the elements the HUD's draw (sub_001DAB00) calls
 #define HUD_ELEMENT(name)              \

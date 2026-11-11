@@ -1469,7 +1469,7 @@ constexpr float kFullWidth = 0.98f;          // a draw reaching this far to both
 // the HUD element drawing, and the span it drew
 struct InlineSide {
     bool drawing = false;
-    int side = 0;
+    float anchor = 0;
     xdk::Fit fit = xdk::Fit::Narrow;
     xdk::ScreenSpan span;
 };
@@ -1568,7 +1568,7 @@ static bool NarrowInline(std::vector<uint32_t>& vertices) {
     }
     AddToSpan(x0, x1);
     if (FullWidth(x0, x1) && g_inline.fit != xdk::Fit::Whole) return false;
-    float move = float(g_inline.side) * (1 - app::NarrowShare());
+    float move = g_inline.anchor * (1 - app::NarrowShare());
     for (size_t i = 0; i + stride <= vertices.size(); i += stride) {
         float clip = std::bit_cast<float>(vertices[i]) * cx.scale + cx.offset;
         float narrowed = clip * Scale() + move;
@@ -1584,7 +1584,7 @@ static void ClipNarrowed() {
     float w = float(R32(kScreenWidth));
     float narrow = app::NarrowShare();
     float spare = w * (1 - narrow);
-    float left = spare * (float(g_inline.side) + 1) / 2;
+    float left = spare * (g_inline.anchor + 1) / 2;
     uint32_t x0 = uint32_t(left);
     uint32_t y0 = 0;
     uint32_t x1 = uint32_t(left + w * narrow);
@@ -1626,7 +1626,7 @@ static void RestoreNarrowed(const NarrowedState& saved) {
 
 // through the projection: clip x becomes x * Scale() + the element's move
 static void NarrowProjection() {
-    float move = float(g_inline.side) * (1 - app::NarrowShare());
+    float move = g_inline.anchor * (1 - app::NarrowShare());
     float* proj = g_state.transforms[kTsProjection].data();
     for (int r = 0; r < 4; r++) proj[r * 4] = proj[r * 4] * Scale() + proj[r * 4 + 3] * move;
     ClipNarrowed();
@@ -1639,7 +1639,7 @@ static void NarrowShaderModel() {
     if (w[3] == 0) return;
     float origin = x[3] / w[3];
     AddToSpan(origin, origin);
-    float move = float(g_inline.side) * (1 - app::NarrowShare());
+    float move = g_inline.anchor * (1 - app::NarrowShare());
     for (int i = 0; i < 4; i++) x[i] = x[i] * Scale() + w[i] * move;
     ClipNarrowed();
 }
@@ -1749,7 +1749,7 @@ static void RunCommands(uint32_t begin, uint32_t end) {
     }
 }
 
-void xdk::BeginInlineSide(int side, xdk::Fit fit) { g_inline = {true, side, fit, {}}; }
+void xdk::BeginInlineSide(float anchor, xdk::Fit fit) { g_inline = {true, anchor, fit, {}}; }
 
 void xdk::SetLinearText(bool on) { g_linear_text = on; }
 

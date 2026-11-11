@@ -7,6 +7,7 @@
 #include "app/display.h"
 #include "app/game_settings.h"
 #include "core/input.h"
+#include "game/hud_widescreen.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -114,6 +115,7 @@ bool InPlay() {
 // a viewport's projection from its camera, thiscall(viewport, clear) ret 4
 X86_EXTERN_FUNC(__imp__sub_ViewportProjection);
 X86_FUNC(sub_ViewportProjection) {
+    game::LatchHudView(ctx.ecx);
     UpdateLetterbox();
     FollowOutputShape();
     uint32_t camera = R32(ctx.ecx + kViewportCamera);

@@ -18,8 +18,8 @@ enum class Fit {
     Shift,   // already in shape, laid out from the middle as for 4:3: moved against its side only
 };
 
-// side: -1 left, 0 middle, 1 right
-void BeginInlineSide(int side, Fit fit = Fit::Narrow);
+// anchor: the clip x that keeps its place, -1 the screen's left edge, 0 its middle, 1 its right edge
+void BeginInlineSide(float anchor, Fit fit = Fit::Narrow);
 ScreenSpan EndInlineSide();
 
 // 2D drawn meanwhile keeps the game's layout
