@@ -72,6 +72,19 @@ constexpr uint32_t kMachineInputs = 0x18;
 constexpr uint32_t kInputArray = 0x4;
 constexpr uint32_t kInputValue = 0x8;
 constexpr uint32_t kInputCameraTilt = 0x15;
+// camera machine +4 its expressions' context; context +0x28 its two DOF sets, each a pointer to a container's pointer,
+// held as the inputs are; the tick ends copying the second, the one its cameras write, over the first (0x2C4AA0)
+constexpr uint32_t kMachineContext = 0x4;
+constexpr uint32_t kContextDofSets = 0x28;
+constexpr uint32_t kWrittenDofSet = 0x4;
+// cover camera (SneakCam2000): runs on the player's cover flags with any of these and none of those; aiming, it faces
+// the reticle until the right stick's x or y moves it to its look (SC2KLookCamera), which turns its bearing and tilt
+constexpr uint32_t kInputCoverFlags = 0x23;
+constexpr uint32_t kCoverCameraFlags = 0x8 | 0x100 | 0x2000 | 0x8000;
+constexpr uint32_t kNoCoverCameraFlags = 0x80 | 0x20000;
+constexpr uint32_t kInputStickX = 0xC;
+constexpr uint32_t kDofLookBearing = 2;
+constexpr uint32_t kDofLookTilt = 3;
 // camera actions: the wagon pivot's swing about the wagon; the mounted gun's yaw and pitch
 constexpr uint32_t kWagonSwing = 0x50;
 constexpr uint32_t kGatlingYaw = 0x5C;
@@ -272,6 +285,21 @@ uint32_t CameraInput(uint32_t machine, uint32_t index) {
     return R32(R32(inputs + kInputArray) + 4 * index) + kInputValue;
 }
 
+// the DOF in the set the cameras write
+uint32_t WrittenDof(uint32_t machine, uint32_t index) {
+    uint32_t sets = R32(machine + kMachineContext) + kContextDofSets;
+    uint32_t dofs = R32(R32(sets + kWrittenDofSet));
+    return R32(R32(dofs + kInputArray) + 4 * index) + kInputValue;
+}
+
+// the cover camera runs and the follow camera's bearing does not, as when aiming in cover
+bool CoverCamera() {
+    uint32_t machine = g_camera.machine;
+    if (!machine || g_camera.following) return false;
+    uint32_t flags = R32(CameraInput(machine, kInputCoverFlags));
+    return (flags & kCoverCameraFlags) && !(flags & kNoCoverCameraFlags);
+}
+
 void AddCameraTurn(Turn t) {
     g_camera.turn.x += t.x;
     g_camera.turn.y += t.y;
@@ -340,6 +368,13 @@ void ApplyCameraTilt() {
     if (!g_camera.following) return;
     if (!TiltLocked()) G<float>(CameraInput(g_camera.machine, kInputCameraTilt)) -= g_camera.turn.y;
     g_camera.turn.y = 0.0f;
+}
+
+void ApplyCoverTurn() {
+    if (!CoverCamera()) return;
+    G<float>(WrittenDof(g_camera.machine, kDofLookBearing)) -= g_camera.turn.x;
+    G<float>(WrittenDof(g_camera.machine, kDofLookTilt)) -= g_camera.turn.y;
+    g_camera.turn = {};
 }
 
 float TakeCameraYaw() {
@@ -436,7 +471,10 @@ X86_EXTERN_FUNC(__imp__sub_CameraInputs);
 X86_FUNC(sub_CameraInputs) {
     uint32_t player = ctx.ecx;
     __imp__sub_CameraInputs(ctx, base);
-    if (MouseTurns(player)) LatchCameraTurn(player);
+    if (!MouseTurns(player)) return;
+    LatchCameraTurn(player);
+    bool turned = g_camera.turn.x != 0.0f || g_camera.turn.y != 0.0f;
+    if (turned && CoverCamera()) G<float>(CameraInput(g_camera.machine, kInputStickX)) = 1.0f;
 }
 
 // the camera machine's tick, thiscall(machine, tunables) ret 4, from the rig's update; a turn its cameras leave is
@@ -446,7 +484,10 @@ X86_FUNC(sub_CameraMachineTick) {
     bool mouse_camera = ctx.ecx && ctx.ecx == g_camera.machine;
     g_camera.ticking = mouse_camera;
     g_camera.followed = false;
-    if (mouse_camera) ApplyCameraTilt();
+    if (mouse_camera) {
+        ApplyCameraTilt();
+        ApplyCoverTurn();
+    }
     __imp__sub_CameraMachineTick(ctx, base);
     g_camera.ticking = false;
     if (!mouse_camera) return;
