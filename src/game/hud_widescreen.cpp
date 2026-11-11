@@ -151,10 +151,22 @@ HUD_ELEMENT(sub_HudMoney)
 HUD_ELEMENT(sub_HudNames)
 HUD_ELEMENT(sub_HudPauseScroll)
 HUD_ELEMENT(sub_HudGoals)
-HUD_ELEMENT(sub_HudHitArrows)
 HUD_ELEMENT(sub_HudHealth)
 HUD_ELEMENT(sub_HudAmmo)
 HUD_ELEMENT(sub_HudCrosshair)
+
+// the cinema shutters, thiscall(shutters): top and bottom bars over cutscenes; none with LETTERBOX off
+X86_EXTERN_FUNC(__imp__sub_HudShutters);
+X86_FUNC(sub_HudShutters) {
+    static Element element;
+    if (!app::Rdr().letterbox) {
+        ctx.esp += 4;  // ret
+        return;
+    }
+    BeginElement(element);
+    __imp__sub_HudShutters(ctx, base);
+    EndElement(element);
+}
 
 // the bridge's cannon counts, thiscall(hud, ...): each team's icon and count goes to its own side
 static Element g_cannons[2];
@@ -190,9 +202,13 @@ X86_FUNC(sub_HudHealthBar) {
 constexpr hle::Va kHudShape = SYM(HudShape);
 constexpr hle::Va kViewportShape = SYM(ViewportShape);
 
-// the letterbox, thiscall(hud): its bars and torn edges already span the screen, kept
+// the letterbox, thiscall(hud): its bars and torn edges already span the screen, kept; none with LETTERBOX off
 X86_EXTERN_FUNC(__imp__sub_HudLetterbox);
 X86_FUNC(sub_HudLetterbox) {
+    if (!app::Rdr().letterbox) {
+        ctx.esp += 4;  // ret
+        return;
+    }
     float hud_shape = G<float>(kHudShape);
     G<float>(kHudShape) = G<float>(kViewportShape);
     xdk::BeginInlineKeep();
@@ -226,9 +242,24 @@ static bool OnPicture(uint32_t page) {
     return false;
 }
 
-// a swui page's widgets, thiscall(page)
+// the main menu's bars, roominstructions.swui's textures over its top and bottom
+constexpr const char* kMenuBars[] = {"bartop", "barbottom"};
+
+static void UpdateMenuBars(uint32_t page) {
+    for (uint32_t i = 0; i < R32(page + kPageWidgetCount); i++) {
+        uint32_t widget = R32(page + kPageWidgets + i * 4);
+        if (!widget) continue;
+        const char* name = static_cast<const char*>(HostPtr(widget + kWidgetName));
+        for (const char* bar : kMenuBars) {
+            if (std::strcmp(name, bar) == 0) G<uint8_t>(widget + kWidgetShown) = app::Rdr().letterbox;
+        }
+    }
+}
+
+// a swui page's widgets, thiscall(page); the main menu's bars follow LETTERBOX
 X86_EXTERN_FUNC(__imp__sub_PageWidgets);
 X86_FUNC(sub_PageWidgets) {
+    UpdateMenuBars(ctx.ecx);
     uint32_t vtable = R32(ctx.ecx);
     bool buttons = vtable == kFrontendButtonsVtable;
     bool popup = vtable == kWarningFrontendVtable || vtable == kDifficultyVtable;

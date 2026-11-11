@@ -73,6 +73,7 @@ enum class RowId {
     MaxFps,
     FpsCounter,
     FmvScale,
+    Letterbox,
     ColourBlind,
     Contrast,
     Aniso,
@@ -131,6 +132,7 @@ constexpr Row kSettingsRows[] = {
     {RowId::MaxFps, "MAX FRAME RATE"},
     {RowId::FpsCounter, "FPS COUNTER"},
     {RowId::FmvScale, "FMV SCALE"},
+    {RowId::Letterbox, "LETTERBOX"},
     {RowId::ColourBlind, "COLOUR BLIND MODE"},
     {RowId::Contrast, "CONTRAST"},
     {RowId::Heading, "GRAPHICS"},
@@ -427,6 +429,7 @@ bool* ToggleFlag(Settings& s, RowId id) {
         case RowId::Vsync: return &s.vsync;
         case RowId::FpsCounter: return &r.fps_counter;
         case RowId::HdrOutput: return &r.hdr_output;
+        case RowId::Letterbox: return &r.letterbox;
         case RowId::Smaa: return &r.smaa;
         case RowId::ScreenBlur: return &r.screen_blur;
         case RowId::PauseOnFocusLoss: return &r.pause_on_focus_loss;
@@ -716,6 +719,7 @@ void RestoreDefaults(int page) {
     r.fps_counter = fresh.fps_counter;
     r.fov = fresh.fov;
     r.fmv_scale = fresh.fmv_scale;
+    r.letterbox = fresh.letterbox;
     r.colour_blind = fresh.colour_blind;
     r.contrast = fresh.contrast;
     r.hdr_output = fresh.hdr_output;

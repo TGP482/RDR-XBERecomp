@@ -34,7 +34,6 @@ constexpr uint32_t kTop = 0x50;
 constexpr uint32_t kOffsetX = 0x58;
 constexpr uint32_t kOffsetY = 0x5C;
 constexpr uint32_t kSelectable = 0xD8;
-constexpr uint32_t kEnabled = 0xE6;
 // a slider has no place of its own: its linked widgets, its title first
 constexpr uint32_t kSlider = 0xF;
 constexpr uint32_t kSliderLinks = 0x114;
@@ -126,7 +125,7 @@ std::vector<Row> Rows(uint32_t page) {
     uint32_t count = std::min(R32(page + kPageWidgetCount), kMaxWidgets);
     for (uint32_t i = 0; i < count; i++) {
         uint32_t widget = R32(page + kPageWidgets + i * 4);
-        if (!widget || !G<uint8_t>(widget + kSelectable) || !G<uint8_t>(widget + kEnabled)) continue;
+        if (!widget || !G<uint8_t>(widget + kSelectable) || !G<uint8_t>(widget + kWidgetShown)) continue;
         uint32_t placed = Placed(widget);
         float left = G<float>(placed + kLeft) + G<float>(placed + kOffsetX);
         float top = G<float>(placed + kTop) + G<float>(placed + kOffsetY);

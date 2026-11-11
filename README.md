@@ -26,6 +26,7 @@ The latest version of [RDR-XBERecomp](https://github.com/TGP482/RDR-XBERecomp/re
 - **HDR Output** - Displays the game in HDR10 on monitors with Windows HDR turned on, keeping white at your Windows SDR content brightness.
 - **FPS Counter** - Displays the frame rate on screen.
 - **FMV Scale** - Choose between Fill, which makes the FMVs fill widescreen displays, and 4:3.
+- **Letterbox** - Toggles the black bars during gameplay and cutscenes. 
 - **Colour Blind Mode** - Adjusts the colours for protanopia, deuteranopia or tritanopia.
 
 ### Graphics
