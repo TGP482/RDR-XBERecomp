@@ -72,6 +72,8 @@ float4 mac_mul(float4 a, float4 b) { return (a == 0 || b == 0) ? (float4)0 : a *
 int mac_arl(float v) { return (int)floor(v + 1e-3); }
 // magnitude clamped between 1 / 2^64 and 2^64, sign kept
 float magclamp(float v) { float m = clamp(abs(v), 5.42101e-20, 1.84467e+19); return v < 0 ? -m : m; }
+// 2D rows on whole console pixels, so pieces meeting inside one stay joined upscaled; half pixels kept
+float whole_row(float y) { return abs(frac(y) - 0.5) < 1e-3 ? y : round(y); }
 float4 ilu_rcp(float v) { return (1.0 / v).xxxx; }
 float4 ilu_rcc(float v) { return magclamp(1.0 / v).xxxx; }
 float4 ilu_rsq(float v) { return v == 0 ? (1.#INF).xxxx : (rsqrt(abs(v))).xxxx; }
@@ -226,6 +228,7 @@ const char* kVsEpilogue = R"(
     // of the far edges on D3D12's, which upscaled leaves the last host columns and rows undrawn
     // surf.w set: a point, which stays put since pulled out it would leave the target
     if (surf.w == 0 && abs(p.x - (surf.x - 0.5)) < 1e-3) p.x = surf.x;
+    if (surf.w == 0 && p.w == 1) p.y = whole_row(p.y);
     if (surf.w == 0 && abs(p.y - (surf.y - 0.5)) < 1e-3) p.y = surf.y;
     q.x = p.x * 2 / surf.x - 1;
     q.y = 1 - p.y * 2 / surf.y;
@@ -911,6 +914,7 @@ std::string FixedVertexHlsl(uint16_t regs, bool pretransformed, uint64_t decode,
     VOut o;
     // like the pretransformed ones, target sized passes end half a console pixel short of the far edges
     float2 sp = (float2(cp.x, -cp.y) / cp.w + 1) * 0.5 * surf.xy;
+    if (surf.w == 0 && cp.w == 1) cp.y = 1 - whole_row(sp.y) * 2 / surf.y;
     if (surf.w == 0 && abs(sp.x - (surf.x - 0.5)) < 1e-3) cp.x = cp.w;
     if (surf.w == 0 && abs(sp.y - (surf.y - 0.5)) < 1e-3) cp.y = -cp.w;
     o.pos = cp;
