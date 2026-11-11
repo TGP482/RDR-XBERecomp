@@ -353,7 +353,7 @@ X86_FUNC(sub_PageWidgets) {
     bool buttons = vtable == kFrontendButtonsVtable;
     bool popup = vtable == kWarningFrontendVtable || vtable == kDifficultyVtable;
     bool narrow = buttons || popup || OnPicture(ctx.ecx);
-    if (buttons) game::BeginPromptBar(ctx.ecx);
+    if (buttons) game::BeginPromptBar(ctx, ctx.ecx);
     if (narrow) BeginMiddle();
     __imp__sub_PageWidgets(ctx, base);
     if (narrow) EndMiddle();

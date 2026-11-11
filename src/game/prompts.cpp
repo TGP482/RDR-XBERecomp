@@ -7,7 +7,6 @@
 #include <cmath>
 #include <iterator>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "core/input.h"
@@ -15,6 +14,7 @@
 #include "game/font.h"
 #include "game/prompt_words.h"
 #include "game/prompts.h"
+#include "game/swui.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -50,9 +50,12 @@ struct BarKey {
     float y;
     float grow;
 };
-std::unordered_map<uint32_t, std::vector<BarKey>> g_bars;  // each bar's keys this frame
-std::vector<BarKey> g_last_bar;                            // the drawing bar's keys last frame
-std::vector<BarKey>* g_bar = nullptr;
+std::vector<BarKey> g_bar;  // the drawing bar's keys, all found before its texts draw
+bool g_in_bar = false;
+bool g_finding_keys = false;
+// a widget's draw slot; a text widget's kind
+constexpr uint32_t kDrawSlot = 0x4;
+constexpr uint32_t kTextKind = 3;
 
 std::u16string ReadText(uint32_t va) {
     std::u16string s;
@@ -169,7 +172,7 @@ bool BarMove(float x, float y, float& move) {
     int keys = 0;
     float before = 0;
     float total = 0;
-    for (const BarKey& k : g_last_bar) {
+    for (const BarKey& k : g_bar) {
         if (std::abs(k.y - y) > 0.5f) continue;
         keys++;
         total += k.grow;
@@ -182,13 +185,13 @@ bool BarMove(float x, float y, float& move) {
 // the draw's x: a key drawn alone ends where its icon did, on a bar's row of keys it starts there
 void PlaceText(X86Context& ctx, const DrawArgs& d, const std::u16string& text, uint32_t keys) {
     bool icon = keys && text.size() == 1 && IsGlyph(text[0]);
-    if (!icon && !g_bar) return;
+    if (!icon && !g_in_bar) return;
     float grow = icon ? float(Width(ctx, d, keys) - Width(ctx, d, d.text)) : 0;
     float& x = G<float>(ctx.esp + 4);
     float y = G<float>(ctx.esp + 8);
-    if (icon && g_bar) g_bar->push_back({x, y, grow});
+    if (icon && g_finding_keys) g_bar.push_back({x, y, grow});
     float move = 0;
-    if (g_bar && BarMove(x, y, move)) x += move + grow - LeftShift(d, grow);
+    if (g_in_bar && BarMove(x, y, move)) x += move + grow - LeftShift(d, grow);
     else x -= LeftShift(d, grow);
     ctx.ecx = d.font;
 }
@@ -204,6 +207,10 @@ X86_FUNC(sub_FontDraw) {
     uint32_t replaced = WithKeys(text, keys) ? WriteText(keys) : 0;
     bool measure = G<uint8_t>(ctx.esp + 0x1C) != 0;
     if (!measure && !text.empty()) PlaceText(ctx, d, text, replaced);
+    if (g_finding_keys && !measure) {
+        ctx.esp += 0x24;  // ret 0x20
+        return;
+    }
     if (replaced) W32(ctx.esp + 0xC, replaced);
     // unbatched, a pixel font's text sets point sampling and draws at once (sub_00054A30)
     bool pixel = !G<uint8_t>(d.font + game_font::kSmooth) && !R32(ctx.esp + 0x20);
@@ -212,13 +219,22 @@ X86_FUNC(sub_FontDraw) {
     xdk::SetLinearText(false);
 }
 
-void game::BeginPromptBar(uint32_t page) {
-    g_bar = &g_bars[page];
-    g_last_bar.clear();
-    g_last_bar.swap(*g_bar);
+// the bar's text widgets run their draws undrawn first, so every key of a row is known before any of it draws
+void game::BeginPromptBar(X86Context& ctx, uint32_t page) {
+    g_bar.clear();
+    g_in_bar = true;
+    if (!input::KeyboardActive()) return;
+    g_finding_keys = true;
+    for (uint32_t i = 0; i < R32(page + swui::kPageWidgetCount); i++) {
+        uint32_t widget = R32(page + swui::kPageWidgets + i * 4);
+        if (!widget || !G<uint8_t>(widget + swui::kWidgetShown)) continue;
+        if (R32(widget + swui::kWidgetKind) == kTextKind) swui::CallSlot(ctx, widget, kDrawSlot, {});
+    }
+    g_finding_keys = false;
+    ctx.ecx = page;  // the widget draws leave ecx on the last widget
 }
 
-void game::EndPromptBar() { g_bar = nullptr; }
+void game::EndPromptBar() { g_in_bar = false; }
 
 // a Flash text field's copy of its ActionScript text; in a text field's draw it hands over the text shown, as keys
 X86_EXTERN_FUNC(__imp__sub_FlashTextCopy);

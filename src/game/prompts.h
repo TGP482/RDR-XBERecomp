@@ -4,9 +4,11 @@
 
 #include <cstdint>
 
+#include "xdk/hle.h"
+
 namespace game {
 
-void BeginPromptBar(uint32_t page);
+void BeginPromptBar(X86Context& ctx, uint32_t page);
 void EndPromptBar();
 
 }  // namespace game
