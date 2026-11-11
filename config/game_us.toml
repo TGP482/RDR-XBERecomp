@@ -412,6 +412,7 @@ InputUpdate                                          = 0x47DC0
 JournalDraw                                          = 0x37440
 LevelCharacter                                       = 0x56DA0
 LightFlicker                                         = 0x106BD0
+LoadPicture                                          = 0x1861B0
 LoadShowEnter                                        = 0x6B190
 LoadShowFrame                                        = 0x66CA0
 LoadSinglePlayer                                     = 0x64980

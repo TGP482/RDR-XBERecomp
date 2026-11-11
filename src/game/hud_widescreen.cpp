@@ -371,6 +371,18 @@ X86_FUNC(sub_LogoPicture) {
     xdk::EndInlineSide();
 }
 
+// the multiplayer loading screen's picture (mpload), thiscall(picture), 4:3: drawn over a screen sized target that
+// the loading screen then stretches over the whole screen (sub_00068E90), so narrowed there over black
+X86_EXTERN_FUNC(__imp__sub_LoadPicture);
+X86_FUNC(sub_LoadPicture) {
+    uint32_t picture = ctx.ecx;
+    if (app::Wide()) CallGuest(ctx, kClear, {kClearTarget, 0xFF000000u, 0, 0});
+    xdk::BeginInlineSide(0, xdk::Fit::Whole);
+    ctx.ecx = picture;
+    __imp__sub_LoadPicture(ctx, base);
+    xdk::EndInlineSide();
+}
+
 // A full screen movie's picture, thiscall(movie, x, y) ret 8, drawn by sub_00070F60. The game fills the 4:3 screen
 // with the movie's 4:3 frame, so a widescreen display stretches it. FMV SCALE's Fill zooms the frame as far as its
 // black bars allow instead; 4:3 narrows the game's picture to 4:3 as the legal screen's. The Rockstar logo stays 4:3.
