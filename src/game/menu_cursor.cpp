@@ -14,6 +14,7 @@
 #include "d3d/pick.h"
 #include "game/exit_menu.h"
 #include "game/load_show.h"
+#include "game/start_prompt.h"
 #include "game/swui.h"
 #include "xdk/hle.h"
 
@@ -370,7 +371,10 @@ void UpdateRewardMenuHover(X86Context& ctx, uint32_t movie) {
 X86_EXTERN_FUNC(__imp__sub_PageUpdate);
 X86_FUNC(sub_PageUpdate) {
     uint32_t page = ctx.ecx;
-    if (G<uint8_t>(page + kActive)) UpdateHover(ctx, page);
+    if (G<uint8_t>(page + kActive)) {
+        UpdateHover(ctx, page);
+        game::UpdateStartPrompt(page);
+    }
     ctx.ecx = page;
     __imp__sub_PageUpdate(ctx, base);
     game::UpdateExitButton(page);

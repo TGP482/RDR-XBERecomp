@@ -43,6 +43,8 @@ Screen GetScreen();
 // a name being typed, kept on by a call each frame: the keys that type press nothing, Enter and Backspace leave A and
 // B alone, and the characters typed meanwhile wait in TakeTyped
 void KeepTextEntry();
+// a "press start" text showing, kept on by a call each frame: a new Enter press presses Start instead of A
+void KeepStartPrompt();
 void OnChar(uint32_t ch, bool repeat);  // window thread, WM_CHAR
 std::string TakeTyped();
 // aiming a weapon: the aim sensitivities apply

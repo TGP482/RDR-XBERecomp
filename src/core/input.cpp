@@ -131,6 +131,12 @@ std::string g_typed;
 
 bool TextEntry() { return NowMs() - g_text_entry_ms < kTextEntryMs; }
 
+// a "press start" text showing, kept on by KeepStartPrompt
+constexpr uint64_t kStartPromptMs = 100;
+std::atomic<uint64_t> g_start_prompt_ms{0};
+
+bool StartPrompt() { return NowMs() - g_start_prompt_ms < kStartPromptMs; }
+
 bool TypesText(int vk) {
     return (vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9') || vk == VK_SPACE || vk == VK_BACK;
 }
@@ -564,13 +570,25 @@ void PressTarget(int b, Pad& p, Sticks& s) {
     else p.buttons |= uint16_t(1u << (b - kButtonTarget));
 }
 
+// Enter presses Start while a "press start" text shows as it goes down, else A, until it is let go
+bool EnterStarts(bool enter) {
+    static bool was = false;
+    static bool start = false;
+    if (enter && !was) start = StartPrompt();
+    was = enter;
+    return enter && start;
+}
+
 // Out of play Enter and a left click confirm (a click skips a movie too), Backspace and the right button back out,
 // the arrows and the wheel move the selection, whatever the keys are bound to
 void PressMenuKeys(Pad& p) {
     if (InPlay()) return;
     bool click = !g_settle_mouse;
     bool typing = TextEntry();
-    if ((Down(VK_RETURN) && !typing) || (click && Down(VK_LBUTTON))) p.analog[kAnalogA] = 0xFF;
+    bool enter = Down(VK_RETURN) && !typing;
+    bool start = EnterStarts(enter);
+    if ((enter && !start) || (click && Down(VK_LBUTTON))) p.analog[kAnalogA] = 0xFF;
+    if (start) p.buttons |= uint16_t(1u << kStart);
     if ((Down(VK_BACK) && !typing) || (click && Down(VK_RBUTTON))) p.analog[kAnalogB] = 0xFF;
     constexpr std::pair<int, int> kKeys[] = {{VK_UP, kDpadUp},       {VK_DOWN, kDpadDown},     {VK_LEFT, kDpadLeft},
                                              {VK_RIGHT, kDpadRight}, {kWheelUp, kDpadUp},      {kWheelDown, kDpadDown}};
@@ -832,6 +850,8 @@ void SetScreen(Screen screen) {
 }
 
 void SetAiming(bool on) { g_aiming = on; }
+
+void KeepStartPrompt() { g_start_prompt_ms = NowMs(); }
 
 void KeepTextEntry() {
     if (!TextEntry()) TakeTyped();  // a new name starts with nothing typed
