@@ -3394,11 +3394,18 @@ void D3D12Backend::ReadPick() {
     pick_fence_[slot] = fence_value_ + 1;  // the next Submit carries it
 }
 
+// a guest edge on the host pixels a quad edge half a console pixel up and left of it covers, as draws are placed
+// (kVsEpilogue), so a clear masks what the draws on it cover; the target's far edge stays
+LONG ScaledEdge(int v, uint32_t guest, float sc, uint32_t host) {
+    if (v >= int(guest)) return LONG(host);
+    return std::clamp<LONG>(LONG(std::ceil((float(v) - 0.5f) * sc - 0.5f)), 0, LONG(host));
+}
+
 // a guest rect scaled to the target and clamped to it
 D3D12_RECT ScaledRect(const Target& t, int x0, int y0, int x1, int y1) {
     float sc = float(t.w) / t.gw;
-    return {std::clamp<LONG>(LONG(x0 * sc), 0, t.w), std::clamp<LONG>(LONG(y0 * sc), 0, t.h),
-            std::clamp<LONG>(LONG(x1 * sc), 0, t.w), std::clamp<LONG>(LONG(y1 * sc), 0, t.h)};
+    return {ScaledEdge(x0, t.gw, sc, t.w), ScaledEdge(y0, t.gh, sc, t.h), ScaledEdge(x1, t.gw, sc, t.w),
+            ScaledEdge(y1, t.gh, sc, t.h)};
 }
 
 // rs: the rects buffer, reused across targets

@@ -688,9 +688,12 @@ HLE_STDCALL(D3DDevice_Swap, 1) {
     return n;
 }
 
+static const uint8_t* NarrowRects(uint32_t count, const uint8_t* rects);
+
 HLE_STDCALL(D3DDevice_Clear, 6) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     const uint8_t* rects = a[0] && a[1] ? static_cast<const uint8_t*>(HostPtr(a[1])) : nullptr;
+    rects = NarrowRects(a[0], rects);
     if (g_backend) g_backend->Clear(g_state, a[0], rects, a[2], a[3], ArgF(a, 4), a[5]);
     return 0;
 }
@@ -1678,6 +1681,25 @@ static bool NarrowPlacedInline(const std::vector<uint32_t>& vertices) {
     if (FullWidth(x0, x1)) return false;
     NarrowProjection();
     return true;
+}
+
+// A clear's rects (x0, y0, x1, y1) narrow with the HUD element drawing: the ammo's glow masks its rect in the
+// target's alpha (sub_001E4960)
+static const uint8_t* NarrowRects(uint32_t count, const uint8_t* rects) {
+    static std::vector<int32_t> narrowed;
+    if (!rects || !g_inline.drawing || !OnScreen()) return rects;
+    const int32_t* given = reinterpret_cast<const int32_t*>(rects);
+    narrowed.assign(given, given + count * 4);
+    float half = float(R32(kScreenWidth)) / 2;
+    float move = g_inline.anchor * (1 - app::NarrowShare());
+    for (uint32_t i = 0; i < count; i++) {
+        int32_t* rect = &narrowed[i * 4];
+        float x0 = (float(rect[0]) / half - 1) * Scale() + move;
+        float x1 = (float(rect[2]) / half - 1) * Scale() + move;
+        rect[0] = int32_t(std::floor((x0 + 1) * half));
+        rect[2] = int32_t(std::ceil((x1 + 1) * half));
+    }
+    return reinterpret_cast<const uint8_t*>(narrowed.data());
 }
 
 HLE_STDCALL(D3DDevice_DrawVertices, 3) {
