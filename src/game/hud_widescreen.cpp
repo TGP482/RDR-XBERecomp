@@ -59,57 +59,73 @@ constexpr hle::Va kSetTexture = SYM(SetFirstStageTexture);
 constexpr hle::Va kDrawRect = SYM(DrawRect);
 constexpr hle::Va kScreenWidth = SYM(ScreenWidth);
 constexpr hle::Va kScreenHeight = SYM(ScreenHeight);
-// a movie's frame is NTSC 4:3 whatever its pixels
-constexpr float kMovieAspect = 4.0f / 3.0f;
-
 // the screen black, so a 4:3 picture leaves no old frame at its sides; full width draws keep their place
 void DrawBlackScreen(X86Context& ctx, uint32_t x, uint32_t y) {
     CallGuest(ctx, kSetTexture, {0});
     CallGuest(ctx, kDrawRect, {x, y, x + R32(kScreenWidth), y + R32(kScreenHeight), 0, 0, 0, 0, 0xFF000000u, 0, 0, 0});
 }
 
-// black rows above and below a movie's picture, of its 480, measured: the cutscenes' unless listed
-struct MovieBars {
+// the shapes a movie's frame shows at
+constexpr float kFourThree = 4.0f / 3.0f;
+constexpr float kSixteenNine = 16.0f / 9.0f;
+
+// a movie's frame and the black rows above and below its picture, of its 480, measured. The level cutscenes, unless
+// listed, are 16:9 frames with the widescreen game's 20 row borders, letterboxed by the game on a 4:3 TV (sub_000703F0)
+struct MovieShape {
     const char* name;
     uint32_t rows;
+    float frame;
 };
-constexpr MovieBars kMovieBars[] = {{"titles", 66}, {"attract", 91}, {"slide01", 0}};
-constexpr uint32_t kCutsceneBars = 20;
+constexpr MovieShape kMovieShapes[] = {
+    {"titles", 66, kFourThree},
+    {"attract", 91, kFourThree},
+    {"slide01", 0, kFourThree},
+};
+constexpr MovieShape kCutscene = {"", 20, kSixteenNine};
 constexpr hle::Va kMovieName = SYM(MovieName);  // the playing movie's name
 
-uint32_t BarRows(uint32_t height) {
+const MovieShape& PlayingMovie() {
     const char* name = static_cast<const char*>(HostPtr(kMovieName));
-    uint32_t rows = kCutsceneBars;
-    for (const MovieBars& m : kMovieBars) {
-        if (std::strstr(name, m.name)) rows = m.rows;
+    for (const MovieShape& m : kMovieShapes) {
+        if (std::strstr(name, m.name)) return m;
     }
-    return rows * height / 480;
+    return kCutscene;
 }
 
-// The movie's 4:3 frame zoomed as far as its black bars allow: a picture wider than the screen fills its width,
-// its rows cropped evenly; a narrower one fills its height between black pillars. Kept as placed.
-void DrawMovieFilled(X86Context& ctx) {
+// The movie's frame zoomed as far as its black bars allow in a box of the given shape in the middle of the screen: a
+// picture wider than the box fills its width, its rows cropped evenly, a frame wider still between black rows; a
+// narrower one fills its height between black pillars. Kept as placed.
+void DrawMovieFilled(X86Context& ctx, const MovieShape& shape, float box) {
     uint32_t movie = ctx.ecx;
     uint32_t texture = R32(movie + kMovieTexture);
     uint32_t bink = R32(movie + kMovieBink);
     if (!texture || !bink) return;
     uint32_t width = R32(bink);
     uint32_t height = R32(bink + 4);
-    uint32_t crop = BarRows(height);
-    float picture = kMovieAspect * float(height) / float(height - 2 * crop);
-    float screen_shape = app::OutputAspect();
-    float shown = 1.0f;  // share of the screen's width
-    if (picture >= screen_shape) crop = uint32_t(float(height) * (1 - kMovieAspect / screen_shape) / 2);
-    else shown = picture / screen_shape;
-    float screen = float(R32(kScreenWidth));
+    uint32_t crop = shape.rows * height / 480;
+    float picture = shape.frame * float(height) / float(height - 2 * crop);
+    float across = box / app::OutputAspect();  // share of the screen's width
+    float down = 1.0f;                          // share of the screen's height
+    if (picture < box) {
+        across *= picture / box;
+    } else if (shape.frame <= box) {
+        crop = uint32_t(float(height) * (1 - shape.frame / box) / 2);
+    } else {
+        crop = 0;
+        down = box / shape.frame;
+    }
+    float screen_width = float(R32(kScreenWidth));
+    float screen_height = float(R32(kScreenHeight));
     uint32_t x = R32(ctx.esp + 4);
     uint32_t y = R32(ctx.esp + 8);
-    uint32_t x0 = x + uint32_t(screen * (1 - shown) / 2);
-    uint32_t x1 = x + uint32_t(screen * (1 + shown) / 2);
+    uint32_t x0 = x + uint32_t(screen_width * (1 - across) / 2);
+    uint32_t x1 = x + uint32_t(screen_width * (1 + across) / 2);
+    uint32_t y0 = y + uint32_t(screen_height * (1 - down) / 2 + 0.5f);
+    uint32_t y1 = y + uint32_t(screen_height * (1 + down) / 2 + 0.5f);
     xdk::BeginInlineKeep();
-    if (shown < 1.0f) DrawBlackScreen(ctx, x, y);
+    if (across < 1.0f || down < 1.0f) DrawBlackScreen(ctx, x, y);
     CallGuest(ctx, kSetTexture, {texture});
-    CallGuest(ctx, kDrawRect, {x0, y, x1, y + R32(kScreenHeight), 0, crop, width, height - crop, 0xFFFFFFFFu, 0, 0, 0});
+    CallGuest(ctx, kDrawRect, {x0, y0, x1, y1, 0, crop, width, height - crop, 0xFFFFFFFFu, 0, 0, 0});
     CallGuest(ctx, kSetTexture, {0});
     xdk::EndInlineKeep();
 }
@@ -470,9 +486,10 @@ X86_FUNC(sub_LoadPicture) {
     xdk::EndInlineSide();
 }
 
-// A full screen movie's picture, thiscall(movie, x, y) ret 8, drawn by sub_00070F60. The game fills the 4:3 screen
-// with the movie's 4:3 frame, so a widescreen display stretches it. FMV SCALE's Fill zooms the frame as far as its
-// black bars allow instead; 4:3 narrows the game's picture to 4:3 as the legal screen's. The Rockstar logo stays 4:3.
+// A full screen movie's picture, thiscall(movie, x, y) ret 8, drawn by sub_00070F60. The game fills the screen
+// with the movie's frame, so a widescreen display stretches it. FMV SCALE's Fill zooms the frame as far as its black
+// bars allow instead; 4:3 shows it in a 4:3 box, a 4:3 frame by narrowing the game's picture as the legal screen's.
+// The Rockstar logo stays 4:3.
 X86_EXTERN_FUNC(__imp__sub_MoviePicture);
 X86_FUNC(sub_MoviePicture) {
     bool logo = R32(ctx.esp) == kMovieDrawReturn && R32(ctx.esp + 0xC) == kLogoLoopReturn;
@@ -480,14 +497,16 @@ X86_FUNC(sub_MoviePicture) {
         __imp__sub_MoviePicture(ctx, base);
         return;
     }
-    if (logo || app::Rdr().fmv_scale == 1) {
+    const MovieShape& shape = PlayingMovie();
+    bool four_three = app::Rdr().fmv_scale == 1;
+    if (logo || (four_three && shape.frame == kFourThree)) {
         DrawBlackScreen(ctx, R32(ctx.esp + 4), R32(ctx.esp + 8));
         xdk::BeginInlineSide(0, xdk::Fit::Whole);
         __imp__sub_MoviePicture(ctx, base);
         xdk::EndInlineSide();
         return;
     }
-    DrawMovieFilled(ctx);
+    DrawMovieFilled(ctx, shape, four_three ? kFourThree : app::OutputAspect());
     ctx.esp += 12;  // ret 8
 }
 
