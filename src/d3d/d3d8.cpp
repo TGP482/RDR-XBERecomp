@@ -28,6 +28,7 @@
 #include "d3d/inline_shift.h"
 #include "d3d/linear_text.h"
 #include "d3d/occlusion.h"
+#include "d3d/open_view.h"
 #include "gpu/backend.h"
 #include "gpu/shaders.h"
 #include "gpu/simple_dirty.h"
@@ -262,9 +263,31 @@ float ZScale(const gpu::Surface& zs) {
 
 bool g_own_constants = false;  // D3DSCM_NORESERVEDCONSTANTS: c-38 and c-37 are the title's
 
+// views that draw over a larger viewport (d3d/open_view.h); the game's viewport stays for c-38, c-37 and the
+// projection while its open one is set
+struct OpenedView {
+    xdk::ViewRect view;
+    xdk::ViewRect open;
+};
+std::vector<OpenedView> g_open_views;
+gpu::Viewport g_view_drawn;
+bool g_view_opened = false;
+
+void ApplyViewport(const gpu::Viewport& v) {
+    g_state.viewport = v;
+    g_view_drawn = v;
+    g_view_opened = false;
+    xdk::ViewRect rect{v.x, v.y, v.w, v.h};
+    for (const OpenedView& o : g_open_views) {
+        if (o.view != rect) continue;
+        g_state.viewport = {o.open.x, o.open.y, o.open.w, o.open.h, v.min_z, v.max_z};
+        g_view_opened = true;
+    }
+}
+
 // c-38 and c-37 hold the viewport scale and offset, as D3D_GetViewportOffsetAndScale computes them
 void UpdateViewportConstants() {
-    auto& v = g_state.viewport;
+    const gpu::Viewport& v = g_view_drawn;
     g_state.zscale = ZScale(g_state.zs);
     float hw = v.w * 0.5f, hh = v.h * 0.5f;
     if (!g_own_constants) {
@@ -330,7 +353,7 @@ void SetFrameBuffers(const char* caller, uint32_t pp) {
         }
         if (kRenderThread) g_backend = gpu::CreateThreadedBackend(std::move(g_backend));
     }
-    g_state.viewport = {0, 0, w, h, 0.0f, 1.0f};
+    ApplyViewport({0, 0, w, h, 0.0f, 1.0f});
     SetDev(kDevRenderTarget, g_buffers[1]);
     SetDev(kDevDepth, g_depth);
     SetDev(kDevBackBuffer, g_buffers[1]);
@@ -612,7 +635,7 @@ HLE_STDCALL(D3DDevice_SetRenderTarget, 2) {
     // SetRenderTarget resets the viewport to the whole target
     uint32_t w, h;
     gpu::SurfaceSize(g_state.rt, w, h);
-    g_state.viewport = {0, 0, w, h, 0.0f, 1.0f};
+    ApplyViewport({0, 0, w, h, 0.0f, 1.0f});
     UpdateViewportConstants();
     return 0;
 }
@@ -720,7 +743,7 @@ HLE_STDCALL(D3DDevice_CopyRects, 5) {
 HLE_STDCALL(D3DDevice_SetViewport, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     uint32_t v = a[0];
-    g_state.viewport = {R32(v), R32(v + 4), R32(v + 8), R32(v + 12), GF(v + 16), GF(v + 20)};
+    ApplyViewport({R32(v), R32(v + 4), R32(v + 8), R32(v + 12), GF(v + 16), GF(v + 20)});
     g_state.scissor_count = 0;
     UpdateViewportConstants();
     return 0;
@@ -1267,12 +1290,39 @@ uint32_t UpVertices(const void* src, uint32_t bytes) {
     return g_up_header;
 }
 
+// D3DTRANSFORMSTATETYPE indices into g_state.transforms
+constexpr size_t kTsView = 2;
+constexpr size_t kTsProjection = 3;
+constexpr size_t kTsWorld = 256;
+
+// an opened view's draw: its projection keeps the picture where the game's viewport puts it
+void BackendDraw(uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices) {
+    if (!g_view_opened) {
+        g_backend->Draw(g_state, prim, start, count, indices);
+        return;
+    }
+    const gpu::Viewport& from = g_view_drawn;
+    const gpu::Viewport& to = g_state.viewport;
+    float ax = float(from.w) / float(to.w);
+    float ay = float(from.h) / float(to.h);
+    float bx = (2.0f * float(from.x) + float(from.w) - 2.0f * float(to.x) - float(to.w)) / float(to.w);
+    float by = (2.0f * float(to.y) + float(to.h) - 2.0f * float(from.y) - float(from.h)) / float(to.h);
+    std::array<float, 16> projection = g_state.transforms[kTsProjection];
+    float* m = g_state.transforms[kTsProjection].data();
+    for (int r = 0; r < 4; r++) {
+        m[r * 4] = m[r * 4] * ax + m[r * 4 + 3] * bx;
+        m[r * 4 + 1] = m[r * 4 + 1] * ay + m[r * 4 + 3] * by;
+    }
+    g_backend->Draw(g_state, prim, start, count, indices);
+    g_state.transforms[kTsProjection] = projection;
+}
+
 void DrawUp(uint32_t prim, uint32_t count, const void* vertices, uint32_t stride) {
     if (!g_backend || !count || !stride) return;
     SyncDeferred();
     auto stream = g_state.streams[0];
     g_state.streams[0] = {UpVertices(vertices, count * stride), stride};
-    g_backend->Draw(g_state, prim, 0, count, nullptr);
+    BackendDraw(prim, 0, count, nullptr);
     g_state.streams[0] = stream;
 }
 
@@ -1449,10 +1499,6 @@ HLE_STDCALL(D3DDevice_BeginPush, 1) {
     return g_push_begin;
 }
 
-// D3DTRANSFORMSTATETYPE indices into g_state.transforms
-constexpr size_t kTsView = 2;
-constexpr size_t kTsProjection = 3;
-constexpr size_t kTsWorld = 256;
 // RDR's models run a vertex shader fed their transposed world view projection at c4 to c7 (sub_00183C20), as
 // hardware order registers (D3D register + 96)
 constexpr size_t kModelClipX = 100;
@@ -1708,7 +1754,7 @@ HLE_STDCALL(D3DDevice_DrawVertices, 3) {
     SyncDeferred();
     NarrowedState saved = SaveNarrowed();
     NarrowElementModel();
-    if (g_backend) g_backend->Draw(g_state, a[0], a[1], a[2], nullptr);
+    if (g_backend) BackendDraw(a[0], a[1], a[2], nullptr);
     RestoreNarrowed(saved);
     return 0;
 }
@@ -1720,7 +1766,7 @@ HLE_STDCALL(D3DDevice_DrawIndexedVertices, 3) {
     const uint8_t* indices = a[2] ? static_cast<const uint8_t*>(HostPtr(a[2])) : nullptr;
     NarrowedState saved = SaveNarrowed();
     NarrowElementModel();
-    if (g_backend) g_backend->Draw(g_state, a[0], 0, a[1], indices);
+    if (g_backend) BackendDraw(a[0], 0, a[1], indices);
     RestoreNarrowed(saved);
     return 0;
 }
@@ -1807,6 +1853,12 @@ void xdk::Occlusion(bool gtao) {
     float p[kOcclusionParams] = {1 / m[0],  1 / m[5],   m[8] * hand, m[9] * hand,        m[14], m[10] * hand,
                                  fog.slope, fog.offset, fog.amount,  gtao ? 1.0f : 0.0f};
     g_backend->Clear(g_state, kOcclusionParams / 4, reinterpret_cast<const uint8_t*>(p), kClearOcclusion, 0, 0, 0);
+}
+
+void xdk::OpenView(const xdk::ViewRect& view, const xdk::ViewRect& open) {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    std::erase_if(g_open_views, [&](const OpenedView& o) { return o.view == view; });
+    if (open != view) g_open_views.push_back({view, open});
 }
 
 void xdk::BeginInlineKeep() { g_keep++; }

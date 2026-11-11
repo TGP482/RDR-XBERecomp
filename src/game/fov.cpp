@@ -1,12 +1,14 @@
 // Field of view in play: the player cameras' angle widens by the setting's tangent over the game's. Cutscenes (the
 // cinema shutters, level intros and outros), the attract loop and the theater keep the game's angle. Every view takes
 // the output's shape, where the game knows only 4:3 and 16:9. Grass culls by the drawn view's width. LETTERBOX off
-// takes the game's own unbordered view, the same width shown taller.
+// takes the game's own unbordered view, the same width shown taller; split screen views also draw over their frames'
+// borders, the picture in place.
 #include <cmath>
 
 #include "app/display.h"
 #include "app/game_settings.h"
 #include "core/input.h"
+#include "d3d/open_view.h"
 #include "game/hud_widescreen.h"
 #include "xdk/hle.h"
 
@@ -104,6 +106,50 @@ float DrawnHalfWidth(float fov, float shape) {
     return std::tan(halfHeight) * shape;
 }
 
+// split screen views sit this share of the screen in from its edges, inside their frames (sub_001378E0); viewport:
+// its x, y, width and height as shares of the screen
+constexpr float kSplitBorder = 0.055f;
+constexpr float kSameShare = 1e-4f;
+constexpr uint32_t kViewportShare = 0x1C;
+
+struct ViewShare {
+    float x;
+    float y;
+    float width;
+    float height;
+};
+
+// an edge on the frames' border moves out to the screen's
+float UnframedEdge(float edge) {
+    if (std::abs(edge - kSplitBorder) < kSameShare) return 0;
+    if (std::abs(edge - (1 - kSplitBorder)) < kSameShare) return 1;
+    return edge;
+}
+
+// LETTERBOX off: the split screen views fill the frames' borders
+ViewShare Unframed(const ViewShare& view) {
+    float x0 = UnframedEdge(view.x);
+    float y0 = UnframedEdge(view.y);
+    float x1 = UnframedEdge(view.x + view.width);
+    float y1 = UnframedEdge(view.y + view.height);
+    return {x0, y0, x1 - x0, y1 - y0};
+}
+
+// the viewport the game makes of a view's shares, truncated as sub_00051700 does
+xdk::ViewRect ScreenRect(const ViewShare& view) {
+    float width = float(R32(kScreenWidth));
+    float height = float(R32(kScreenHeight));
+    return {uint32_t(width * view.x), uint32_t(height * view.y), uint32_t(width * view.width),
+            uint32_t(height * view.height)};
+}
+
+// LETTERBOX off: a split screen view draws over its frame's border too, its picture where the game puts it
+void UpdateOpenView(uint32_t viewport) {
+    const ViewShare& view = G<ViewShare>(viewport + kViewportShare);
+    ViewShare open = app::Rdr().letterbox ? view : Unframed(view);
+    xdk::OpenView(ScreenRect(view), ScreenRect(open));
+}
+
 bool InPlay() {
     input::Screen screen = input::GetScreen();
     bool playing = screen == input::Screen::Play || screen == input::Screen::Pause;
@@ -118,6 +164,7 @@ X86_FUNC(sub_ViewportProjection) {
     game::LatchHudView(ctx.ecx);
     UpdateLetterbox();
     FollowOutputShape();
+    UpdateOpenView(ctx.ecx);
     uint32_t camera = R32(ctx.ecx + kViewportCamera);
     bool widen = InPlay() && FovScale() != 1.0f;
     if (!camera || (!widen && !g_letterbox_held)) {

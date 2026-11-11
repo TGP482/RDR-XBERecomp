@@ -295,6 +295,16 @@ X86_FUNC(sub_HudLetterbox) {
     G<float>(kHudShape) = hud_shape;
 }
 
+// the split screen frames' draw, thiscall(frames); none with LETTERBOX off
+X86_EXTERN_FUNC(__imp__sub_SplitFrames);
+X86_FUNC(sub_SplitFrames) {
+    if (!app::Rdr().letterbox) {
+        ctx.esp += 4;  // ret
+        return;
+    }
+    __imp__sub_SplitFrames(ctx, base);
+}
+
 // the lock reticle, thiscall(reticle): centred on its target in the 3D view, kept
 X86_EXTERN_FUNC(__imp__sub_LockReticle);
 X86_FUNC(sub_LockReticle) {

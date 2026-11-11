@@ -453,6 +453,7 @@ SoftLockSearchFirstPass                              = 0x141D50
 SoftLockSearchSecondPass                             = 0x142850
 SoundPageDraw                                        = 0x303F0
 SoundPageOpen                                        = 0x304F0
+SplitFrames                                          = 0x1DD460
 StateMachineStep                                     = 0x5E7E0
 TextElementDraw                                      = 0x21AE0
 TitleScreens                                         = 0x17BC0
